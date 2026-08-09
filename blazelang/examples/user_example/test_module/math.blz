@@ -1,0 +1,126 @@
+// BlazeLang Math Library
+// test_module/math.blz
+
+Export var VERSION = "1.0"
+
+Export constant PI = 3.141592653589793
+Export constant E = 2.718281828459045
+
+Export Function Add(a, b) {
+    return a + b
+}
+
+Export Function Subtract(a, b) {
+    return a - b
+}
+
+Export Function Multiply(a, b) {
+    return a * b
+}
+
+Export Function Divide(a, b) {
+    if b == 0 {
+        return "Cannot divide by zero"
+    }
+
+    return a / b
+}
+
+Export Function Modulo(a, b) {
+    return a % b
+}
+
+Export Function Power(a, b) {
+    return a ** b
+}
+
+Export Function Square(a) {
+    return a * a
+}
+
+Export Function Cube(a) {
+    return a * a * a
+}
+
+Export Meta Absolute(value) {
+    if value < 0 {
+        return -value
+    }
+
+    return value
+}
+
+Export Meta Max(a, b) {
+    if a > b {
+        return a
+    }
+
+    return b
+}
+
+Export Meta Min(a, b) {
+    if a < b {
+        return a
+    }
+
+    return b
+}
+
+Export Meta IsEven(value) {
+    return value % 2 == 0
+}
+
+Export Meta IsOdd(value) {
+    return value % 2 != 0
+}
+
+Export Default Class Calculator {
+
+    public Meta Calculate(operation, a, b) {
+
+        if operation == "+" {
+            return Add(a, b)
+        }
+
+        if operation == "-" {
+            return Subtract(a, b)
+        }
+
+        if operation == "*" {
+            return Multiply(a, b)
+        }
+
+        if operation == "/" {
+            return Divide(a, b)
+        }
+
+        if operation == "%" {
+            return Modulo(a, b)
+        }
+
+        if operation == "**" {
+            return Power(a, b)
+        }
+
+        return "Unknown operation"
+    }
+
+    private Meta Help() {
+        Show("Supported operations:")
+        Show("+  Addition")
+        Show("-  Subtraction")
+        Show("*  Multiplication")
+        Show("/  Division")
+        Show("%  Modulo")
+        Show("** Power")
+    }
+
+    static Function Create() {
+        return Calculator()
+    }
+
+    static Meta Info() {
+        Show("BlazeLang Math Calculator")
+        Show("Math Library v1.0")
+    }
+}

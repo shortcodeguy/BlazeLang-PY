@@ -1,0 +1,4 @@
+Import Json from "json"
+
+var project = { name: "BlazeLang", version: "1.5", active: true }
+Show(Json.Stringify(project))

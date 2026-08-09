@@ -1,0 +1,4 @@
+Import File from "file"
+
+File.Append("log.txt", "Program started\\n")
+Show("Log updated.")

@@ -1,0 +1,279 @@
+// =========================================================
+// BlazeLang Loop Showcase
+// Tests: while, for-in, range, Break, Continue,
+//        nested loops, arrays, and loop conditions.
+// =========================================================
+
+Show("================================")
+Show("      BlazeLang Loop Test")
+Show("================================")
+
+
+// =========================================================
+// 1. Basic while loop
+// =========================================================
+
+Show("1. While Loop")
+
+var counter = 0
+
+while counter < 5 {
+    Show("Counter: " + counter)
+    counter += 1
+}
+
+
+// =========================================================
+// 2. While loop with Continue
+// =========================================================
+
+Show("2. While + Continue")
+
+var number = 0
+
+while number < 6 {
+    number += 1
+
+    if number == 3 {
+        Continue
+    }
+
+    Show("Number: " + number)
+}
+
+
+// =========================================================
+// 3. While loop with Break
+// =========================================================
+
+Show("3. While + Break")
+
+var value = 0
+
+while value < 10 {
+    value += 1
+
+    if value == 5 {
+        Break
+    }
+
+    Show("Value: " + value)
+}
+
+
+// =========================================================
+// 4. Basic for-in loop
+// =========================================================
+
+Show("4. For-In Loop")
+
+for i in range(0, 5) {
+    Show("Index: " + i)
+}
+
+
+// =========================================================
+// 5. For-in with range(start, end)
+// =========================================================
+
+Show("5. Range Loop")
+
+for i in range(1, 6) {
+    Show("Value: " + i)
+}
+
+
+// =========================================================
+// 6. Range with step
+// =========================================================
+
+Show("6. Range With Step")
+
+for i in range(0, 10, 2) {
+    Show("Even: " + i)
+}
+
+
+// =========================================================
+// 7. Reverse range
+// =========================================================
+
+Show("7. Reverse Range")
+
+for i in range(5, 0, -1) {
+    Show("Countdown: " + i)
+}
+
+
+// =========================================================
+// 8. For-in over an array
+// =========================================================
+
+Show("8. Array Loop")
+
+var fruits = ["Apple", "Banana", "Mango", "Orange"]
+
+for fruit in fruits {
+    Show("Fruit: " + fruit)
+}
+
+
+// =========================================================
+// 9. Continue inside for-in
+// =========================================================
+
+Show("9. For-In + Continue")
+
+for i in range(0, 6) {
+    if i == 2 {
+        Continue
+    }
+
+    Show("Current: " + i)
+}
+
+
+// =========================================================
+// 10. Break inside for-in
+// =========================================================
+
+Show("10. For-In + Break")
+
+for i in range(0, 10) {
+    if i == 5 {
+        Break
+    }
+
+    Show("Current: " + i)
+}
+
+
+// =========================================================
+// 11. Nested loops
+// =========================================================
+
+Show("11. Nested Loops")
+
+for row in range(1, 4) {
+    for column in range(1, 4) {
+        Show("Row: " + row + ", Column: " + column)
+    }
+}
+
+
+// =========================================================
+// 12. Nested loops with Continue
+// =========================================================
+
+Show("12. Nested + Continue")
+
+for row in range(1, 4) {
+    for column in range(1, 4) {
+
+        if column == 2 {
+            Continue
+        }
+
+        Show("Cell: " + row + "," + column)
+    }
+}
+
+
+// =========================================================
+// 13. Nested loops with Break
+// =========================================================
+
+Show("13. Nested + Break")
+
+for row in range(1, 4) {
+    for column in range(1, 5) {
+
+        if column == 3 {
+            Break
+        }
+
+        Show("Cell: " + row + "," + column)
+    }
+}
+
+
+// =========================================================
+// 14. Calculate a sum using a loop
+// =========================================================
+
+Show("14. Loop Calculation")
+
+var sum = 0
+
+for i in range(1, 6) {
+    sum += i
+}
+
+Show("Sum: " + sum)
+
+
+// =========================================================
+// 15. Find first matching value
+// =========================================================
+
+Show("15. Search With Break")
+
+var target = 7
+var found = false
+
+for i in range(1, 11) {
+    if i == target {
+        found = true
+        Break
+    }
+}
+
+if found {
+    Show("Target found: " + target)
+}
+else {
+    Show("Target not found")
+}
+
+
+// =========================================================
+// 16. Loop over words
+// =========================================================
+
+Show("16. String Array Loop")
+
+var words = ["Blaze", "Lang", "Programming", "Language"]
+
+for word in words {
+    Show("Word: " + word)
+}
+
+
+// =========================================================
+// 17. Loop with condition
+// =========================================================
+
+Show("17. Conditional Loop")
+
+var x = 1
+
+while x <= 10 {
+
+    if x % 2 == 0 {
+        Show("Even: " + x)
+    }
+    else {
+        Show("Odd: " + x)
+    }
+
+    x += 1
+}
+
+
+// =========================================================
+// Complete
+// =========================================================
+
+Show("================================")
+Show("     ALL LOOP TESTS PASSED")
+Show("================================")

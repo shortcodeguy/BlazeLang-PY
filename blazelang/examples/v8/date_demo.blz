@@ -1,0 +1,5 @@
+Import Date from "date"
+
+Show(Date.Today())
+Show(Date.Format("dd/MM/yyyy"))
+Show(Date.Weekday())

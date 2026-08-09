@@ -1,0 +1,5 @@
+Show("Greeting module loaded")
+
+Export Function greet(name) {
+    return "Hello, " + name + "!"
+}

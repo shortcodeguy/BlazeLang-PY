@@ -1,0 +1,39 @@
+Class User {
+    Constructor(name) {
+        this.name = name
+    }
+
+    // Public static function
+    public static Function Create(name) {
+        return User(name)
+    }
+
+    // Private static function
+    private static Function SecretCode() {
+        return "BLAZE-PRIVATE"
+    }
+
+    // Public instance function
+    public Function GetName() {
+        return this.name
+    }
+
+    // Private instance function
+    private Function InternalInfo() {
+        return "Internal user information"
+    }
+}
+
+var user = User.Create("BlazeLang")
+
+Show(user.GetName())
+
+// Public static function can be called from outside
+Show(User.Create("Developer"))
+
+// Private static function should NOT be accessible from outside
+// Show(User.SecretCode())       // Error: private function
+
+// Private instance function should NOT be accessible from outside
+// Show(user.InternalInfo())     // Error: private function
+

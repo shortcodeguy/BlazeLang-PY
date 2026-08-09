@@ -1,0 +1,16 @@
+Show("Loading math module")
+
+Export constant PI = 3.14159
+Export var favorites = [3, 7, 42]
+
+Export Function add(a, b) {
+    return a + b
+}
+
+Export Function multiply(a, b) {
+    return a * b
+}
+
+Export Function square(value) {
+    return value * value
+}

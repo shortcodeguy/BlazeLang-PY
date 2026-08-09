@@ -1,0 +1,7 @@
+Import Json from "json"
+
+var text = "{\"language\":\"BlazeLang\",\"version\":\"1.5\"}"
+var obj = Json.Parse(text)
+
+Show(obj.language)
+Show(obj.version)

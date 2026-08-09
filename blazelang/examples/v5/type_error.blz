@@ -1,0 +1,3 @@
+// BLZ2004: invalid operand types
+var values = [1, 2, 3]
+var invalid = values + 5

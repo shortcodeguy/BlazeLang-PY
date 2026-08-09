@@ -1,0 +1,5 @@
+{
+  "name": "BlazeLang Interpreter",
+  "commandline": "%LOCALAPPDATA%\\BlazeLang\\blzinterpreter.exe",
+  "hidden": false
+}

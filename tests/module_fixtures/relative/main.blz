@@ -1,0 +1,2 @@
+Import { A } from "nested/a.blz"
+Import { value } from "shared.blz"

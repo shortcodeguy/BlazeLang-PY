@@ -1,0 +1,18 @@
+Export var namedValue = "named export"
+Export constant fixedValue = 7
+
+Export Function add(left, right) {
+    return left + right
+}
+
+Export Meta Log(message) {
+    Show(message)
+}
+
+Export Class ExportedClass {
+    Function Name() {
+        return "ExportedClass"
+    }
+}
+
+Export Default var DefaultThing = "default export"

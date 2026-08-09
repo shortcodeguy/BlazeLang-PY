@@ -1,0 +1,10 @@
+// BLZ2002: includes a user-function call stack
+Function calculate() {
+    return total
+}
+
+Function printTotal() {
+    return calculate()
+}
+
+printTotal()

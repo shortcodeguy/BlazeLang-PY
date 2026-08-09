@@ -1,0 +1,6 @@
+// This validates resolving a path relative to the importing module.
+Import { DATABASE_NAME } from "../data/database.blz"
+
+Export Meta printDatabaseInfo() {
+    Show("Connected to database: {DATABASE_NAME}")
+}

@@ -1,0 +1,94 @@
+Import Json from "json"
+
+Show("=== Struct JSON Test ===")
+
+Struct User {
+    name
+    age
+    active = true
+}
+
+Struct Address {
+    city
+    pin
+}
+
+Struct Profile {
+    user
+    address
+    tags
+}
+
+var address = Address("Patna", 800001)
+
+var user = User("Rohit", 13)
+
+var profile = Profile(
+    user,
+    address,
+    ["BlazeLang", "Python", "C++"]
+)
+
+Show(profile.user.name)
+Show(profile.user.age)
+Show(profile.user.active)
+
+Show(profile.address.city)
+Show(profile.address.pin)
+
+Show(profile.tags)
+
+var json = Json.Stringify(profile)
+
+Show(json)
+
+Show("=== Mutation Test ===")
+
+profile.user.name = "Blaze"
+profile.user.age = 14
+profile.address.city = "Delhi"
+
+Show(profile.user.name)
+Show(profile.user.age)
+Show(profile.address.city)
+
+Show(Json.Stringify(profile))
+
+Show("=== Array Of Structs ===")
+
+var users = [
+    User("Rohit", 13),
+    User("Blaze", 14),
+    User("Developer", 20)
+]
+
+for current in users {
+    Show(current.name)
+    Show(current.age)
+}
+
+Show(Json.Stringify(users))
+
+Show("=== Null Struct Field ===")
+
+Struct Settings {
+    theme
+    value = null
+}
+
+var settings = Settings()
+
+Show(settings.theme)
+Show(settings.value)
+
+if settings.theme == null {
+    Show("Theme is null")
+}
+
+if settings.value == null {
+    Show("Value is null")
+}
+
+Show(Json.Stringify(settings))
+
+Show("=== Struct Tests Complete ===")

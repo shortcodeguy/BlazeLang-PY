@@ -1,0 +1,4 @@
+Show("Loading config module")
+
+Export constant APP_NAME = "BlazeLang"
+Export constant VERSION = "1.1.0"

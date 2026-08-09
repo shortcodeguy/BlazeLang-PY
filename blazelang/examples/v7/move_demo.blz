@@ -1,0 +1,7 @@
+Import File from "file"
+
+File.CreateDirectory("archive")
+File.Write("temp.txt", "Move me")
+File.Move("temp.txt", "archive/temp.txt")
+File.Rename("archive/temp.txt", "archive/renamed.txt")
+Show("File moved and renamed.")

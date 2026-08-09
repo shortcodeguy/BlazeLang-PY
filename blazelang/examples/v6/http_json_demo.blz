@@ -1,0 +1,13 @@
+Import Http from "http"
+Import Json from "json"
+
+var response = Http.Get("https://jsonplaceholder.typicode.com/todos/1")
+var todo = Json.Parse(response.body)
+
+if response.ok {
+    Show("Title: {todo.title}")
+    Show("Completed: {todo.completed}")
+}
+else {
+    Show("HTTP Error: {response.statusText}")
+}

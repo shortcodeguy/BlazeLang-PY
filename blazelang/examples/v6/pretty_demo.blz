@@ -1,0 +1,4 @@
+Import * as Json from "json"
+
+var project = { name: "BlazeLang", contributors: ["Rohit", "Asha"] }
+Show(Json.Pretty(project))

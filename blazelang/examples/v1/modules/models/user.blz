@@ -1,0 +1,11 @@
+Show("Loading user model")
+
+Export Default Class User {
+    Constructor(name) {
+        this.name = name
+    }
+
+    Function greet() {
+        return "Hello, " + this.name + "!"
+    }
+}

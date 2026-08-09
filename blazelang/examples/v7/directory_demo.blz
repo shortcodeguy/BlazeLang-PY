@@ -1,0 +1,12 @@
+Import File from "file"
+
+File.CreateDirectory("workspace/reports")
+File.Write("workspace/reports/today.txt", "Ready")
+
+for directory in File.ListDirectories("workspace") {
+    Show(directory)
+}
+
+for file in File.ListFiles("workspace/reports") {
+    Show(file)
+}

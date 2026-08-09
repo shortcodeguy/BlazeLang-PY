@@ -1,0 +1,14 @@
+Import Http from "http"
+
+Show("Downloading sample JSON...")
+var response = Http.Download(
+    "https://jsonplaceholder.typicode.com/todos/1",
+    "downloads/todo.json"
+)
+
+if response.ok {
+    Show("Saved file to: {response.path}")
+}
+else {
+    Show("Download failed: {response.statusText}")
+}

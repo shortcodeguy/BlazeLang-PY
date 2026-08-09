@@ -1,0 +1,7 @@
+// HTTP calls return a safe response object rather than crashing the program.
+Import Http from "http"
+
+var response = Http.Get("not-a-valid-http-url")
+Show("HTTP Error [BLZ4001]")
+Show("Status: {response.status}")
+Show("Reason: {response.statusText}")

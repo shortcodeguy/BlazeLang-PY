@@ -1,0 +1,52 @@
+// BlazeLang v1.1 Module System Demo
+// Run from the project root:
+//   python main.py run blazelang/examples/full_demo.blz
+
+// Named imports, including an alias
+Import { APP_NAME as appName, VERSION } from "modules/config.blz"
+Import { add as sum, multiply, PI } from "modules/math.blz"
+
+// The same file is loaded a second way. Its "Loading math module" message
+// appears only once, demonstrating module caching.
+Import * as Math from "modules/math.blz"
+
+// Default import
+Import User from "modules/models/user.blz"
+
+// This module itself performs a ../ relative import.
+Import { printDatabaseInfo } from "modules/services/report.blz"
+
+Show("============================================")
+Show("  {appName} v{VERSION}")
+Show("  Module System Demo")
+Show("============================================")
+Show("")
+Show("=== Named and Alias Imports ===")
+Show("sum(10, 20) = {sum(10, 20)}")
+Show("multiply(6, 7) = {multiply(6, 7)}")
+Show("PI = {PI}")
+Show("")
+
+Show("=== Namespace Import ===")
+var namespaceSum = Math.add(2, 5)
+var squared = Math.square(9)
+Show("Math.add(2, 5) = {namespaceSum}")
+Show("Math.square(9) = {squared}")
+Show("Math.favorites[1] = {Math.favorites[1]}")
+Show("")
+
+Show("=== Default Export (Class) ===")
+var user = User("Rohit")
+var greeting = user.greet()
+Show("Created user: {greeting}")
+Show("")
+
+Show("=== Relative Imports ===")
+printDatabaseInfo()
+Show("")
+
+Show("=== Cache Check ===")
+Show("math.blz was imported twice but executed once.")
+Show("Look above for exactly one 'Loading math module' line.")
+Show("")
+Show("Module demo completed successfully.")

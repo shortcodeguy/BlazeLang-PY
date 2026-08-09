@@ -1,0 +1,10 @@
+Import Env from "env"
+
+Env.Set("BLAZELANG_DEMO", "ready")
+
+Show(Env.Get("BLAZELANG_DEMO"))
+Show(Env.Exists("BLAZELANG_DEMO"))
+
+Env.Remove("BLAZELANG_DEMO") // #Important# This removes BLAZELANG_DEMO from your .env file
+
+Show(Env.Exists("BLAZELANG_DEMO"))

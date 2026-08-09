@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+**/node_modules/
+
+# Environment
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# Build / generated files
+dist/
+build/
+*.log
+
+# Python packaging
+*.egg-info/
+
+# OS
+Thumbs.db
+.DS_Store

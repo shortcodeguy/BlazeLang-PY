@@ -1,0 +1,2 @@
+Import { value } from "../shared.blz"
+Export var A = value

@@ -1,0 +1,2 @@
+var name = Input("What's your name:")
+Show("input test completed")

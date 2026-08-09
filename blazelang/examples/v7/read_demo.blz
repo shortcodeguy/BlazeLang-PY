@@ -1,0 +1,4 @@
+Import File from "file"
+
+var text = File.Read("hello.txt")
+Show(text)
