@@ -50,9 +50,20 @@ class BlazeLanguageService {
         const symbols = [];
         const imports = new Map();
         const diagnostics = [];
-        const seenDeclarations = new Map();
         const braces = [];
         let blockComment = false;
+
+        // Scope-aware duplicate detection: each brace-delimited block (Class
+        // body, Function/Meta body, if/while/for body, or any other `{ }`
+        // block) gets its own declaration set, pushed when a `{` is seen and
+        // popped when its matching `}` is seen. A `var`/`constant` name is
+        // only compared against names already declared in the *current*
+        // (innermost) scope -- not against every declaration in the file --
+        // so the same name can be reused freely across separate Meta
+        // functions, classes, or sibling blocks, while a real duplicate
+        // within the same scope is still reported.
+        const scopeStack = [new Map()];
+        const currentScope = () => scopeStack[scopeStack.length - 1];
 
         for (let lineNo = 0; lineNo < document.lineCount; lineNo += 1) {
             const line = document.lineAt(lineNo).text;
@@ -61,31 +72,81 @@ class BlazeLanguageService {
 
             this.validateLine(structuralCode, lineNo, diagnostics);
 
-            for (let column = 0; column < structuralCode.length; column += 1) {
-                const char = structuralCode[column];
-                if (char === '{')
-                    braces.push(new vscode.Position(lineNo, column));
-                if (char === '}') {
-                    if (braces.length === 0)
-                        diagnostics.push(this.diagnostic(lineNo, column, 1, 'BLZ1001', 'Unexpected closing brace'));
-                    else
-                        braces.pop();
-                }
-            }
-
+            // Walk declarations and braces on this line together, in
+            // left-to-right column order, so a scope-introducing `{` that
+            // appears earlier on the same line as a later declaration (e.g.
+            // `if x { var n = 10 }` all on one line) still assigns that
+            // declaration to the *new* inner scope, while a `Class`/`Meta`/
+            // `Function` name is recorded in whichever scope was active at
+            // its own position -- normally the enclosing scope, since its
+            // own trailing `{` comes after its name.
             declaration.lastIndex = 0;
+            const lineDeclarations = [];
             for (let match = declaration.exec(code); match; match = declaration.exec(code)) {
                 const kind = this.symbolKind(match[1]);
                 const start = match.index + match[0].lastIndexOf(match[2]);
+                lineDeclarations.push({ match, kind, start });
+            }
+            let declIndex = 0;
+
+            for (let column = 0; column < structuralCode.length; column += 1) {
+                while (declIndex < lineDeclarations.length && lineDeclarations[declIndex].start === column) {
+                    const { match, kind, start } = lineDeclarations[declIndex];
+                    const range = new vscode.Range(lineNo, start, lineNo, start + match[2].length);
+                    symbols.push({ name: match[2], kind, range, selectionRange: range, detail: `${match[1]} declaration` });
+
+                    // Class/Function/Meta declare a *name* visible in the
+                    // scope active at this column (normally the enclosing
+                    // scope, since their own trailing `{` is still ahead on
+                    // the line); the scope they introduce for their own body
+                    // is a fresh frame pushed below once that `{` is reached
+                    // -- so a `var` of the same name inside two different
+                    // Meta bodies is never compared against each other here.
+                    const scope = currentScope();
+                    const prior = scope.get(match[2]);
+                    if (prior && kind !== 'parameter') {
+                        diagnostics.push(this.diagnostic(lineNo, start, match[2].length, 'BLZ1004', `Duplicate declaration '${match[2]}'`, vscode.DiagnosticSeverity.Warning));
+                    }
+                    else
+                        scope.set(match[2], range);
+                    declIndex += 1;
+                }
+
+                const char = structuralCode[column];
+                if (char === '{') {
+                    braces.push(new vscode.Position(lineNo, column));
+                    scopeStack.push(new Map());
+                }
+                if (char === '}') {
+                    if (braces.length === 0)
+                        diagnostics.push(this.diagnostic(lineNo, column, 1, 'BLZ1001', 'Unexpected closing brace'));
+                    else {
+                        braces.pop();
+                        // Guard scopeStack.length > 1 so a stray/unmatched
+                        // closing brace (already reported above) can never
+                        // pop the outermost (global) scope.
+                        if (scopeStack.length > 1)
+                            scopeStack.pop();
+                    }
+                }
+            }
+            // Any declarations positioned at or past the end of the
+            // structural code (should not normally happen, since matches
+            // come from `code` which is at least as long as
+            // `structuralCode`) are still recorded in whatever scope is
+            // current once the column scan finishes.
+            while (declIndex < lineDeclarations.length) {
+                const { match, kind, start } = lineDeclarations[declIndex];
                 const range = new vscode.Range(lineNo, start, lineNo, start + match[2].length);
                 symbols.push({ name: match[2], kind, range, selectionRange: range, detail: `${match[1]} declaration` });
-
-                const prior = seenDeclarations.get(match[2]);
+                const scope = currentScope();
+                const prior = scope.get(match[2]);
                 if (prior && kind !== 'parameter') {
                     diagnostics.push(this.diagnostic(lineNo, start, match[2].length, 'BLZ1004', `Duplicate declaration '${match[2]}'`, vscode.DiagnosticSeverity.Warning));
                 }
                 else
-                    seenDeclarations.set(match[2], range);
+                    scope.set(match[2], range);
+                declIndex += 1;
             }
 
             const imported = importPattern.exec(code);

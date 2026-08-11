@@ -2,17 +2,208 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "BlazeLang",
   "scopeName": "source.blazelang",
-  "patterns": [{ "include": "#comments" }, { "include": "#strings" }, { "include": "#declarations" }, { "include": "#imports" }, { "include": "#keywords" }, { "include": "#constants" }, { "include": "#numbers" }, { "include": "#calls" }, { "include": "#properties" }, { "include": "#operators" }],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#imports"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#properties"
+    },
+    {
+      "include": "#logicalOperators"
+    },
+    {
+      "include": "#bitwiseOperators"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
   "repository": {
-    "comments": { "patterns": [{ "name": "comment.line.double-slash.blazelang", "match": "//.*$" }, { "name": "comment.block.blazelang", "begin": "/\\*", "end": "\\*/" }] },
-    "strings": { "patterns": [{ "name": "string.quoted.double.blazelang", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.blazelang", "match": "\\\\[nt\\\\\"'{}]" }] }, { "name": "string.quoted.single.blazelang", "begin": "'", "end": "'", "patterns": [{ "name": "constant.character.escape.blazelang", "match": "\\\\[nt\\\\\"'{}]" }] }] },
-    "declarations": { "patterns": [{ "match": "\\b(Class)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.class.blazelang" }, "2": { "name": "entity.name.type.class.blazelang" } } }, { "match": "\\b(Function|Meta)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.function.blazelang" }, "2": { "name": "entity.name.function.blazelang" } } }, { "match": "\\b(Constructor)\\b", "name": "entity.name.function.constructor.blazelang" }, { "match": "\\b(var|constant)\\s+([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "storage.type.blazelang" }, "2": { "name": "variable.other.readwrite.blazelang" } } }] },
-    "imports": { "patterns": [{ "match": "\\b(Import|Export|Default|from|as)\\b", "name": "keyword.control.import.blazelang" }, { "match": "(?<=from\\s)[\"'][^\"']+[\"']", "name": "entity.name.module.blazelang" }] },
-    "keywords": { "patterns": [{ "match": "\\b(if|else|while|for|in|return|Break|Continue|try|catch|finally|throw|static|public|private|this|super)\\b", "name": "keyword.control.blazelang" }, { "match": "\\b(and|or|not)\\b", "name": "keyword.operator.logical.blazelang" }] },
-    "constants": { "patterns": [{ "match": "\\b(true|false|null)\\b", "name": "constant.language.blazelang" }, { "match": "\\b(Show|Print|Input|len|range|type|Int|Float|String|Bool|Upper|Lower|Trim|Split|Join|Replace|Contains|StartsWith|EndsWith|Find|Reverse|Random|Sleep|Exit)\\b", "name": "support.function.builtin.blazelang" }] },
-    "numbers": { "patterns": [{ "match": "\\b\\d+(?:\\.\\d+)?\\b", "name": "constant.numeric.blazelang" }] },
-    "calls": { "patterns": [{ "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()", "name": "entity.name.function.call.blazelang" }] },
-    "properties": { "patterns": [{ "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*", "name": "variable.other.property.blazelang" }] },
-    "operators": { "patterns": [{ "match": "\\*\\*|==|!=|>=|<=|\\+=|-=|\\*=|/=|[+*/%<>=-]", "name": "keyword.operator.blazelang" }] }
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.blazelang",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.blazelang",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.blazelang",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.blazelang",
+              "match": "\\\\[nt\\\\\"'{}]"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.blazelang",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.blazelang",
+              "match": "\\\\[nt\\\\\"'{}]"
+            }
+          ]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(Class)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.class.blazelang"
+            },
+            "2": {
+              "name": "entity.name.type.class.blazelang"
+            }
+          }
+        },
+        {
+          "match": "\\b(Function|Meta)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.blazelang"
+            },
+            "2": {
+              "name": "entity.name.function.blazelang"
+            }
+          }
+        },
+        {
+          "match": "\\b(Constructor)\\b",
+          "name": "entity.name.function.constructor.blazelang"
+        },
+        {
+          "match": "\\b(var|constant)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.blazelang"
+            },
+            "2": {
+              "name": "variable.other.readwrite.blazelang"
+            }
+          }
+        }
+      ]
+    },
+    "imports": {
+      "patterns": [
+        {
+          "match": "\\b(Import|Export|Default|from|as)\\b",
+          "name": "keyword.control.import.blazelang"
+        },
+        {
+          "match": "(?<=from\\s)[\"'][^\"']+[\"']",
+          "name": "entity.name.module.blazelang"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(if|else|while|for|in|return|Break|Continue|try|catch|finally|throw|static|public|private|this|super)\\b",
+          "name": "keyword.control.blazelang"
+        },
+        {
+          "match": "\\b(and|or|not)\\b",
+          "name": "keyword.operator.logical.blazelang"
+        }
+      ]
+    },
+    "logicalOperators": {
+      "patterns": [
+        {
+          "match": "&&|\\|\\|",
+          "name": "keyword.operator.logical.blazelang"
+        }
+      ]
+    },
+    "bitwiseOperators": {
+      "patterns": [
+        {
+          "match": "[&|]",
+          "name": "keyword.operator.bitwise.blazelang"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "match": "\\b(true|false|null)\\b",
+          "name": "constant.language.blazelang"
+        },
+        {
+          "match": "\\b(Show|Print|Input|len|range|type|Int|Float|String|Bool|Upper|Lower|Trim|Split|Join|Replace|Contains|StartsWith|EndsWith|Find|Reverse|Random|Sleep|Exit)\\b",
+          "name": "support.function.builtin.blazelang"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b\\d+(?:\\.\\d+)?\\b",
+          "name": "constant.numeric.blazelang"
+        }
+      ]
+    },
+    "calls": {
+      "patterns": [
+        {
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()",
+          "name": "entity.name.function.call.blazelang"
+        }
+      ]
+    },
+    "properties": {
+      "patterns": [
+        {
+          "match": "(?<=\\.)[A-Za-z_][A-Za-z0-9_]*",
+          "name": "variable.other.property.blazelang"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "\\*\\*|==|!=|>=|<=|\\+=|-=|\\*=|/=|[+*/%<>=-]",
+          "name": "keyword.operator.blazelang"
+        }
+      ]
+    }
   }
 }

@@ -2,37 +2,176 @@
   "name": "blazelang",
   "displayName": "BlazeLang",
   "description": "First-class language support for BlazeLang (.blz) files.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "ShortCodeGuyStudio",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/blazelang/vscode-blazelang" },
-  "bugs": { "url": "https://github.com/blazelang/vscode-blazelang/issues" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blazelang/vscode-blazelang"
+  },
+  "bugs": {
+    "url": "https://github.com/blazelang/vscode-blazelang/issues"
+  },
   "homepage": "https://github.com/blazelang/vscode-blazelang#readme",
   "icon": "media/blazelang-icon.png",
-  "categories": ["Programming Languages", "Formatters", "Snippets"],
-  "keywords": ["blazelang", "blaze", "blz"],
-  "engines": { "vscode": "^1.95.0" },
-  "main": "./out/extension.js",
-  "activationEvents": [ "workspaceContains:**/*.blz"],
-  "contributes": {
-    "languages": [{ "id": "blazelang", "aliases": ["BlazeLang", "blz"], "extensions": [".blz"], "configuration": "./language-configuration.json", "icon": { "light": "./media/blazelang-file.svg", "dark": "./media/blazelang-file.svg" } }],
-    "grammars": [{ "language": "blazelang", "scopeName": "source.blazelang", "path": "./syntaxes/blazelang.tmLanguage.json" }],
-    "snippets": [{ "language": "blazelang", "path": "./snippets/blazelang.code-snippets" }],
-    "commands": [
-      { "command": "blazelang.runCurrentFile", "title": "BlazeLang: Run Current File", "icon": "$(play)" },
-      { "command": "blazelang.formatDocument", "title": "BlazeLang: Format Document", "icon": "$(symbol-ruler)" },
-      { "command": "blazelang.restartLanguageServer", "title": "BlazeLang: Restart Language Server", "icon": "$(refresh)" },
-      { "command": "blazelang.newFile", "title": "BlazeLang: New BlazeLang File", "icon": "$(new-file)" },
-      { "command": "blazelang.showVersion", "title": "BlazeLang: Show Version", "icon": "$(info)" }
-    ],
-    "configuration": { "title": "BlazeLang", "properties": {
-      "blazelang.interpreterPath": { "type": "string", "default": "", "description": "Path to blz.exe, blzinterpreter.exe, or a compatible BlazeLang command." },
-      "blazelang.enableDiagnostics": { "type": "boolean", "default": true, "description": "Enable BlazeLang editor diagnostics." },
-      "blazelang.format.indentSize": { "type": "number", "default": 4, "minimum": 1, "maximum": 8, "description": "Spaces per indentation level." }
-    } },
-    "menus": { "commandPalette": [{ "command": "blazelang.runCurrentFile" }, { "command": "blazelang.formatDocument" }, { "command": "blazelang.restartLanguageServer" }, { "command": "blazelang.newFile" }, { "command": "blazelang.showVersion" }] },
-    "semanticTokenScopes": [{ "language": "blazelang", "scopes": { "class": ["entity.name.type.class.blazelang"], "function": ["entity.name.function.blazelang"], "method": ["entity.name.function.member.blazelang"], "variable": ["variable.other.readwrite.blazelang"], "parameter": ["variable.parameter.blazelang"], "property": ["variable.other.property.blazelang"] } }]
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Snippets"
+  ],
+  "keywords": [
+    "blazelang",
+    "blaze",
+    "blz"
+  ],
+  "engines": {
+    "vscode": "^1.95.0"
   },
-  "scripts": { "compile": "tsc -p ./", "watch": "tsc -watch -p ./", "lint": "eslint src --ext ts", "format": "prettier --write .", "package": "vsce package", "prepublishOnly": "npm run compile && npm run lint" },
-  "devDependencies": { "@types/node": "^22.10.2", "@types/vscode": "^1.95.0", "@typescript-eslint/eslint-plugin": "^8.18.0", "@typescript-eslint/parser": "^8.18.0", "@vscode/vsce": "^3.2.1", "eslint": "^9.17.0", "prettier": "^3.4.2", "typescript": "^5.7.2" }
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.blz"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "blazelang",
+        "aliases": [
+          "BlazeLang",
+          "blz"
+        ],
+        "extensions": [
+          ".blz"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./media/blazelang-file.svg",
+          "dark": "./media/blazelang-file.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "blazelang",
+        "scopeName": "source.blazelang",
+        "path": "./syntaxes/blazelang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "blazelang",
+        "path": "./snippets/blazelang.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "blazelang.runCurrentFile",
+        "title": "BlazeLang: Run Current File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "blazelang.formatDocument",
+        "title": "BlazeLang: Format Document",
+        "icon": "$(symbol-ruler)"
+      },
+      {
+        "command": "blazelang.restartLanguageServer",
+        "title": "BlazeLang: Restart Language Server",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "blazelang.newFile",
+        "title": "BlazeLang: New BlazeLang File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "blazelang.showVersion",
+        "title": "BlazeLang: Show Version",
+        "icon": "$(info)"
+      }
+    ],
+    "configuration": {
+      "title": "BlazeLang",
+      "properties": {
+        "blazelang.interpreterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to blz.exe, blzinterpreter.exe, or a compatible BlazeLang command."
+        },
+        "blazelang.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable BlazeLang editor diagnostics."
+        },
+        "blazelang.format.indentSize": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Spaces per indentation level."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "blazelang.runCurrentFile"
+        },
+        {
+          "command": "blazelang.formatDocument"
+        },
+        {
+          "command": "blazelang.restartLanguageServer"
+        },
+        {
+          "command": "blazelang.newFile"
+        },
+        {
+          "command": "blazelang.showVersion"
+        }
+      ]
+    },
+    "semanticTokenScopes": [
+      {
+        "language": "blazelang",
+        "scopes": {
+          "class": [
+            "entity.name.type.class.blazelang"
+          ],
+          "function": [
+            "entity.name.function.blazelang"
+          ],
+          "method": [
+            "entity.name.function.member.blazelang"
+          ],
+          "variable": [
+            "variable.other.readwrite.blazelang"
+          ],
+          "parameter": [
+            "variable.parameter.blazelang"
+          ],
+          "property": [
+            "variable.other.property.blazelang"
+          ]
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "format": "prettier --write .",
+    "package": "vsce package",
+    "prepublishOnly": "npm run compile && npm run lint"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vscode/vsce": "^3.2.1",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
 }

@@ -921,14 +921,14 @@ class Interpreter:
     def visit_BinaryOperation(self, node: BinaryOperation) -> Any:
         left = self.visit(node.left)
 
-        # Short-circuit evaluation for 'and'
-        if node.operator == 'and':
+        # Short-circuit evaluation for 'and' / '&&'
+        if node.operator in ('and', '&&'):
             if not self.is_truthy(left):
                 return left
             return self.visit(node.right)
 
-        # Short-circuit evaluation for 'or'
-        if node.operator == 'or':
+        # Short-circuit evaluation for 'or' / '||'
+        if node.operator in ('or', '||'):
             if self.is_truthy(left):
                 return left
             return self.visit(node.right)
@@ -1200,6 +1200,8 @@ class Interpreter:
             self._import_http(node)
         elif module_name == "httpserver":
             self._import_httpserver(node)
+        elif module_name == 'convert':
+            self._import_convert(node)
         else:
             try:
                 exports = self._load_module(module_name)
@@ -1897,6 +1899,10 @@ class Interpreter:
     def _import_env(self, node):
         from blazelang.stdlib.env import create_env_module
         self._import_standard_module(node, create_env_module(), "env")
+
+    def _import_convert(self, node):
+        from blazelang.stdlib.convert import create_convert_module
+        self._import_standard_module(node, create_convert_module(), "convert")
 
     def _import_httpserver(self, node):
         from blazelang.stdlib.httpserver import create_httpserver_module
