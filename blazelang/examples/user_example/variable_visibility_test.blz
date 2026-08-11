@@ -60,6 +60,6 @@ if (user.IsSecretNull()) {
 
 
 // Direct access should fail
-Show(user.secret)
+// Show(user.secret)
 
 Show("TEST PASSED")

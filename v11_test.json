@@ -1,0 +1,10 @@
+{
+    "name": "Rohit",
+    "age": 12,
+    "active": true,
+    "skills": [
+        "Python",
+        "C++",
+        "BlazeLang"
+    ]
+}

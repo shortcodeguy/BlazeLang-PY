@@ -1,0 +1,414 @@
+// BlazeLang Math Module V3 Developer Edition Test
+
+Import Math from "math"
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+Show("========== CONSTANTS ==========")
+
+Show(Math.PI)
+Show(Math.E)
+Show(Math.TAU)
+Show(Math.INFINITY)
+Show(Math.NAN)
+
+Show(Math.PHI)
+Show(Math.SQRT2)
+Show(Math.SQRT3)
+Show(Math.LN2)
+Show(Math.LN10)
+Show(Math.LOG2E)
+Show(Math.LOG10E)
+
+Show(Math.EPSILON)
+Show(Math.MAX_INT)
+Show(Math.MIN_INT)
+Show(Math.MAX_FLOAT)
+Show(Math.MIN_FLOAT)
+
+// ============================================================
+// BITWISE
+// ============================================================
+
+Show("========== BITWISE ==========")
+
+Show(Math.BitAnd(12, 10))
+Show(Math.BitOr(12, 10))
+Show(Math.BitXor(12, 10))
+Show(Math.BitNot(10))
+
+Show(Math.BitShiftLeft(2, 3))
+Show(Math.BitShiftRight(16, 2))
+
+Show(Math.BitCount(255))
+Show(Math.BitCount(0))
+
+Show(Math.IsPowerOfTwo(16))
+Show(Math.IsPowerOfTwo(15))
+Show(Math.IsPowerOfTwo(0))
+
+Show(Math.NextPowerOfTwo(17))
+Show(Math.NextPowerOfTwo(1))
+Show(Math.NextPowerOfTwo(0))
+
+// ============================================================
+// NUMERIC / FLOATING-POINT UTILITIES
+// ============================================================
+
+Show("========== NUMERIC ==========")
+
+Show(Math.IsApproximately(0.1 + 0.2, 0.3))
+Show(Math.IsApproximately(10.001, 10.0, 0.01))
+Show(Math.IsApproximately(1.0, 2.0))
+
+Show(Math.Epsilon())
+
+Show(Math.Normalize(75, 0, 100))
+Show(Math.Normalize(0, 0, 100))
+Show(Math.Normalize(100, 0, 100))
+
+Show(Math.Map(75, 0, 100, 0, 1))
+Show(Math.Map(5, 0, 10, 0, 100))
+Show(Math.Map(50, 0, 100, -1, 1))
+
+Show(Math.Saturate(-5))
+Show(Math.Saturate(0.5))
+Show(Math.Saturate(5))
+
+Show(Math.Wrap(370, 0, 360))
+Show(Math.Wrap(-10, 0, 360))
+
+Show(Math.Wrap01(1.25))
+Show(Math.Wrap01(-0.25))
+
+Show(Math.Clamp01(-1))
+Show(Math.Clamp01(0.5))
+Show(Math.Clamp01(2))
+
+Show(Math.AbsInt(-5))
+Show(Math.BitLength(255))
+Show(Math.GcdExtended(48, 18))
+
+// ============================================================
+// INTERPOLATION
+// ============================================================
+
+Show("========== INTERPOLATION ==========")
+
+Show(Math.Lerp(0, 100, 0.5))
+Show(Math.InverseLerp(0, 100, 25))
+Show(Math.InverseLerp(0, 100, 75))
+
+Show(Math.SmoothStep(0, 1, 0))
+Show(Math.SmoothStep(0, 1, 0.5))
+Show(Math.SmoothStep(0, 1, 1))
+
+Show(Math.SmootherStep(0, 1, 0))
+Show(Math.SmootherStep(0, 1, 0.5))
+Show(Math.SmootherStep(0, 1, 1))
+
+// ============================================================
+// EASING
+// ============================================================
+
+Show("========== EASING ==========")
+
+Show(Math.EaseInQuad(0))
+Show(Math.EaseInQuad(0.5))
+Show(Math.EaseInQuad(1))
+
+Show(Math.EaseOutQuad(0))
+Show(Math.EaseOutQuad(0.5))
+Show(Math.EaseOutQuad(1))
+
+Show(Math.EaseInOutQuad(0.25))
+Show(Math.EaseInOutQuad(0.75))
+
+Show(Math.EaseInCubic(0.5))
+Show(Math.EaseOutCubic(0.5))
+Show(Math.EaseInOutCubic(0.25))
+Show(Math.EaseInOutCubic(0.75))
+
+Show(Math.EaseInSine(0.5))
+Show(Math.EaseOutSine(0.5))
+Show(Math.EaseInOutSine(0.5))
+
+// ============================================================
+// MODULAR ARITHMETIC
+// ============================================================
+
+Show("========== MODULAR ARITHMETIC ==========")
+
+Show(Math.ModPow(2, 10, 1000))
+Show(Math.ModPow(7, 128, 13))
+
+Show(Math.ModInverse(3, 11))
+Show(Math.ModInverse(7, 26))
+
+Show(Math.ExtendedGcd(48, 18))
+Show(Math.ExtendedGcd(35, 15))
+
+// ============================================================
+// FAST NUMBER THEORY
+// ============================================================
+
+Show("========== FAST NUMBER THEORY ==========")
+
+Show(Math.IsPrimeFast(1000000007))
+Show(Math.IsPrimeFast(1000000008))
+Show(Math.IsPrimeFast(97))
+
+Show(Math.FastFibonacci(0))
+Show(Math.FastFibonacci(1))
+Show(Math.FastFibonacci(10))
+Show(Math.FastFibonacci(50))
+
+// Existing V2.1 number theory still available unchanged
+Show(Math.IsPrime(97))
+Show(Math.Fibonacci(10))
+
+// ============================================================
+// CONVERSIONS
+// ============================================================
+
+Show("========== CONVERSIONS ==========")
+
+Show(Math.ToRadians(180))
+Show(Math.ToDegrees(Math.PI))
+
+Show(Math.ToDecibels(1))
+Show(Math.ToDecibels(10))
+Show(Math.FromDecibels(0))
+Show(Math.FromDecibels(20))
+
+// ============================================================
+// VECTORS
+// ============================================================
+
+Show("========== VECTORS ==========")
+
+Show(Math.VectorAdd([1, 2, 3], [4, 5, 6]))
+Show(Math.VectorSubtract([4, 5, 6], [1, 2, 3]))
+Show(Math.VectorScale([1, 2, 3], 2))
+Show(Math.VectorNormalize([3, 4]))
+Show(Math.VectorDistance([0, 0], [3, 4]))
+
+// Existing V2.1 vector functions still available unchanged
+Show(Math.VectorLength([3, 4]))
+Show(Math.Dot([1, 2, 3], [4, 5, 6]))
+Show(Math.Cross([1, 0, 0], [0, 1, 0]))
+
+// ============================================================
+// MATRICES
+// ============================================================
+
+Show("========== MATRICES ==========")
+
+var a = [
+    [1, 2],
+    [3, 4]
+]
+
+var b = [
+    [5, 6],
+    [7, 8]
+]
+
+Show(Math.MatrixAdd(a, b))
+Show(Math.MatrixSubtract(a, b))
+Show(Math.MatrixMultiply(a, b))
+Show(Math.MatrixTranspose(a))
+Show(Math.MatrixIdentity(3))
+Show(Math.MatrixScale(a, 2))
+Show(Math.MatrixDeterminant(a))
+Show(Math.MatrixTrace(a))
+
+// ============================================================
+// ANGLES
+// ============================================================
+
+Show("========== ANGLES ==========")
+
+Show(Math.AngleBetween([1, 0], [0, 1]))
+Show(Math.AngleBetweenDeg([1, 0], [0, 1]))
+Show(Math.AngleBetweenDeg([1, 1], [1, 0]))
+
+// ============================================================
+// V2.1 REGRESSION
+// ============================================================
+
+Show("========== REGRESSION ==========")
+
+Show(Math.Square(12))
+Show(Math.Cube(5))
+Show(Math.Reciprocal(4))
+Show(Math.Frac(12.75))
+Show(Math.Frac(-12.75))
+Show(Math.Average(10, 20, 30))
+
+Show(Math.Sec(0))
+Show(Math.Csc(Math.PI / 2))
+Show(Math.Cot(Math.PI / 4))
+Show(Math.Asec(2))
+Show(Math.Acsc(2))
+Show(Math.Acot(1))
+Show(Math.SinDeg(90))
+Show(Math.CosDeg(0))
+Show(Math.TanDeg(45))
+
+Show(Math.Combinations(5, 2))
+Show(Math.Permutations(5, 2))
+Show(Math.Binomial(5, 2))
+
+Show(Math.Factors(12))
+Show(Math.PrimeFactors(60))
+Show(Math.NextPrime(20))
+Show(Math.IsEven(10))
+Show(Math.IsOdd(7))
+
+Show(Math.Sum(1, 2, 3, 4, 5))
+Show(Math.Mean(10, 20, 30))
+Show(Math.Median(1, 2, 3, 4))
+Show(Math.Mode(1, 2, 2, 3, 3, 3))
+Show(Math.Variance(1, 2, 3, 4, 5))
+Show(Math.StdDev(1, 2, 3, 4, 5))
+Show(Math.Range(10, 20, 5, 30))
+
+Show(Math.Random())
+Show(Math.RandomInt(1, 10))
+Show(Math.RandomRange(1.5, 5.5))
+Show(Math.RandomBool())
+Show(Math.RandomChoice([1, 2, 3, 4, 5]))
+Show(Math.RandomSign())
+
+Show(Math.CircleArea(5))
+Show(Math.CircleCircumference(5))
+Show(Math.RectangleArea(10, 5))
+Show(Math.TriangleArea(10, 5))
+Show(Math.Distance2D(0, 0, 3, 4))
+Show(Math.Distance3D(0, 0, 0, 1, 2, 2))
+
+Show(Math.Abs(-42))
+Show(Math.Sqrt(81))
+Show(Math.Cbrt(27))
+Show(Math.Pow(2, 8))
+Show(Math.Sign(-10))
+Show(Math.Trunc(12.98))
+
+Show(Math.Sin(0))
+Show(Math.Cos(0))
+Show(Math.Tan(0))
+Show(Math.Asin(1))
+Show(Math.Acos(1))
+Show(Math.Atan(1))
+Show(Math.Atan2(1, 1))
+Show(Math.Sinh(1))
+Show(Math.Cosh(1))
+Show(Math.Tanh(1))
+Show(Math.Degrees(Math.PI))
+Show(Math.Radians(180))
+
+Show(Math.Log(Math.E))
+Show(Math.Log(100, 10))
+Show(Math.Log10(1000))
+Show(Math.Log2(8))
+Show(Math.Exp(1))
+
+Show(Math.Floor(12.9))
+Show(Math.Ceil(12.1))
+Show(Math.Round(12.3456))
+Show(Math.Round(12.3456, 2))
+
+Show(Math.Min(10, 20, 5, 30))
+Show(Math.Max(10, 20, 5, 30))
+Show(Math.Clamp(120, 0, 100))
+Show(Math.Hypot(3, 4))
+
+Show(Math.Factorial(5))
+Show(Math.Gcd(48, 18))
+Show(Math.Lcm(4, 6))
+Show(Math.IsPrime(97))
+Show(Math.Mod(10, 3))
+
+Show(Math.IsNaN(Math.NAN))
+Show(Math.IsFinite(100))
+Show(Math.IsFinite(Math.INFINITY))
+Show(Math.IsInteger(10))
+Show(Math.IsInteger(10.5))
+
+// ============================================================
+// COMBINED REAL-WORLD TESTS
+// ============================================================
+
+Show("========== COMBINED TESTS ==========")
+
+// Game dev: ease a UI panel into view
+var panelT = Math.Clamp01(0.6)
+var panelEase = Math.EaseOutCubic(panelT)
+Show(panelEase)
+
+// Game dev: remap heading with wraparound
+var heading = Math.Wrap(400, 0, 360)
+Show(heading)
+
+// Scripting: bit mixing
+var mixed = Math.BitXor(Math.BitShiftLeft(12, 3), 10)
+Show(mixed)
+
+// Engineering: amplitude to decibels and back
+var db = Math.ToDecibels(2)
+var amplitude = Math.FromDecibels(db)
+Show(db)
+Show(amplitude)
+
+// Cryptography-flavored: modular exponentiation
+var cipher = Math.ModPow(5, 117, 19)
+Show(cipher)
+
+// Graphics: normalize and scale a direction vector
+var direction = Math.VectorNormalize([3, 4])
+var scaled = Math.VectorScale(direction, 10)
+Show(scaled)
+
+// Graphics: transform a point with a scaling matrix
+var point = [
+    [2],
+    [3]
+]
+var scaleMatrix = Math.MatrixScale(Math.MatrixIdentity(2), 5)
+var transformed = Math.MatrixMultiply(scaleMatrix, point)
+Show(transformed)
+
+// Original V2.1 combined checks, still valid
+var radius = 5
+var area = Math.CircleArea(radius)
+Show(area)
+
+var distance = Math.Distance2D(0, 0, 3, 4)
+Show(distance)
+
+var score = Math.Average(85, 90, 95)
+Show(score)
+
+var prime = Math.IsPrimeFast(97)
+Show(prime)
+
+var fib = Math.FastFibonacci(30)
+Show(fib)
+
+var vector = Math.VectorLength([3, 4])
+Show(vector)
+
+var combination = Math.Combinations(10, 2)
+Show(combination)
+
+var percentage = Math.Clamp01(1.25)
+Show(percentage)
+
+// ============================================================
+// FINAL
+// ============================================================
+
+Show("========== MATH V3 DEVELOPER EDITION TEST COMPLETE ==========")

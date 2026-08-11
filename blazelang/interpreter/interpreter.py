@@ -28,6 +28,7 @@ from blazelang.errors.error_handler import (
 )
 from typing import Any, Callable, Dict, List
 import re
+import math
 from pathlib import Path
 import os
 from difflib import get_close_matches
@@ -279,7 +280,7 @@ def _struct_display_value(value: Any) -> str:
         return 'null'
     if isinstance(value, bool):
         return str(value).lower()
-    if isinstance(value, float) and value == int(value):
+    if isinstance(value, float) and math.isfinite(value) and value == int(value):
         return str(int(value))
     if isinstance(value, (int, float)):
         return str(value)
@@ -1297,6 +1298,21 @@ class Interpreter:
     # String Interpolation
     # =====================
 
+    # A `{...}` span is only ever real BlazeLang interpolation syntax if its
+    # contents look like an expression (identifier, dotted/bracket access,
+    # a function call, an operator expression, etc). Arbitrary runtime string
+    # values -- most importantly JSON produced by Json.Stringify() -- can
+    # legitimately contain literal `{`, `}`, `:`, quotes and slashes (e.g.
+    # `{"name":"Rohit","active":true}`, `{"url":"https://example.com"}`).
+    # Those are NOT interpolation expressions, and running them through
+    # _evaluate_embedded_expression corrupts them (stray backslashes,
+    # dropped quotes/braces, etc) because that evaluator makes assumptions --
+    # like "a string that starts and ends with a quote is a string literal"
+    # -- that only hold for hand-written interpolation expressions, not for
+    # JSON text that happens to be wrapped in braces. Detect that shape
+    # up front and skip interpolation for it instead of trying to evaluate it.
+    _JSON_LIKE_BRACE_CONTENT = re.compile(r'"\s*:\s*(?:"|-?\d|true\b|false\b|null\b|\{|\[)')
+
     def _interpolate_string(self, text: str) -> str:
         """
         Process string interpolation with support for:
@@ -1306,6 +1322,10 @@ class Interpreter:
         - Nested function calls: {len(fruits)}
         - Chained access: {student.subjects[0]}
         - Arithmetic: {a + b}, {a % b}
+
+        Runtime string values that merely CONTAIN braces (most notably JSON
+        text returned by Json.Stringify()) are left untouched -- see
+        _JSON_LIKE_BRACE_CONTENT above.
         """
         result = []
         i = 0
@@ -1322,6 +1342,14 @@ class Interpreter:
 
                 if brace_count == 0:
                     expr = text[i+1:j-1].strip()
+
+                    # Not a real interpolation expression -- e.g. JSON
+                    # object/array content. Copy the span through verbatim,
+                    # unmodified, instead of attempting to evaluate it.
+                    if self._JSON_LIKE_BRACE_CONTENT.search(expr):
+                        result.append(text[i:j])
+                        i = j
+                        continue
 
                     try:
                         # First try to evaluate as a complex expression
@@ -1350,7 +1378,7 @@ class Interpreter:
             return 'null'
         if isinstance(value, bool):
             return str(value).lower()
-        if isinstance(value, float) and value == int(value):
+        if isinstance(value, float) and math.isfinite(value) and value == int(value):
             return str(int(value))
         if isinstance(value, (int, float)):
             return str(value)
@@ -1732,8 +1760,19 @@ class Interpreter:
         sorted_ops = sorted(operators, key=len, reverse=True)
 
         i = 0
+        in_string = False
+        string_char = None
         while i < len(expr):
-            if expr[i] in '([{':
+            if in_string:
+                if expr[i] == string_char:
+                    in_string = False
+                    string_char = None
+                i += 1
+            elif expr[i] in '"\'':
+                in_string = True
+                string_char = expr[i]
+                i += 1
+            elif expr[i] in '([{':
                 depth += 1
                 i += 1
             elif expr[i] in ')]}':

@@ -598,6 +598,222 @@ class StructConstructionError(RuntimeError):
         )
 
 
+# --- Additional Runtime Errors ---
+
+class AttributeError(RuntimeError):
+    """Raised when an object does not have the requested attribute"""
+
+    def __init__(
+        self,
+        attribute_name: str,
+        target_type: str = None,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        target = f"'{target_type}' object" if target_type else "value"
+        super().__init__(
+            f"{target} has no attribute '{attribute_name}'",
+            line,
+            column,
+            filename,
+            code="BLZ2031",
+            hint=f"Check that '{attribute_name}' is defined on the target object.",
+        )
+
+
+class ValueError(RuntimeError):
+    """Raised when a value is invalid for an operation"""
+
+    def __init__(
+        self,
+        message: str,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            message,
+            line,
+            column,
+            filename,
+            code="BLZ2032",
+            hint="Check that the value provided is valid for this operation.",
+        )
+
+
+class OverflowError(RuntimeError):
+    """Raised when a numeric operation exceeds supported limits"""
+
+    def __init__(
+        self,
+        message: str = "Numeric result is too large",
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            message,
+            line,
+            column,
+            filename,
+            code="BLZ2033",
+            hint="Use smaller values or break the calculation into smaller operations.",
+        )
+
+
+class UnboundVariableError(RuntimeError):
+    """Raised when a variable is accessed before being initialized"""
+
+    def __init__(
+        self,
+        variable_name: str,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            f"Variable '{variable_name}' was accessed before it was initialized",
+            line,
+            column,
+            filename,
+            code="BLZ2034",
+            hint=f"Assign a value to '{variable_name}' before reading it.",
+        )
+
+
+class StopIterationError(RuntimeError):
+    """Raised when an iterator has no more values"""
+
+    def __init__(
+        self,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            "Iterator has no more values",
+            line,
+            column,
+            filename,
+            code="BLZ2035",
+            hint="Check whether the iterator still has a value before requesting the next item.",
+        )
+
+
+class UnsupportedOperationError(RuntimeError):
+    """Raised when an operation is unsupported for a value or type"""
+
+    def __init__(
+        self,
+        operation: str,
+        target_type: str = None,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        target = f" on {target_type}" if target_type else ""
+        super().__init__(
+            f"Operation '{operation}' is not supported{target}",
+            line,
+            column,
+            filename,
+            code="BLZ2036",
+            hint="Check the operation and make sure the target value supports it.",
+        )
+
+
+class InvalidAssignmentError(RuntimeError):
+    """Raised when an assignment target is invalid"""
+
+    def __init__(
+        self,
+        target: str = None,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        target_text = f" '{target}'" if target else ""
+        super().__init__(
+            f"Invalid assignment target{target_text}",
+            line,
+            column,
+            filename,
+            code="BLZ2037",
+            hint="Assignments must target a variable, property, or valid index.",
+        )
+
+
+class InvalidOperatorError(RuntimeError):
+    """Raised when an operator is invalid for the supplied operands"""
+
+    def __init__(
+        self,
+        operator: str,
+        left_type: str = None,
+        right_type: str = None,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        types = ""
+        if left_type and right_type:
+            types = f" between {left_type} and {right_type}"
+
+        super().__init__(
+            f"Invalid operator '{operator}'{types}",
+            line,
+            column,
+            filename,
+            code="BLZ2038",
+            hint=f"Check whether '{operator}' can be used with these values.",
+        )
+
+
+class MissingArgumentError(RuntimeError):
+    """Raised when a required function argument is missing"""
+
+    def __init__(
+        self,
+        func_name: str,
+        expected: int,
+        given: int,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            f"Function '{func_name}' expects {expected} argument(s), but received {given}",
+            line,
+            column,
+            filename,
+            code="BLZ2039",
+            hint=f"Provide the required argument(s) when calling '{func_name}()'.",
+        )
+
+
+class TooManyArgumentsError(RuntimeError):
+    """Raised when too many arguments are passed to a function"""
+
+    def __init__(
+        self,
+        func_name: str,
+        expected: int,
+        given: int,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            f"Function '{func_name}' expects {expected} argument(s), but received {given}",
+            line,
+            column,
+            filename,
+            code="BLZ2040",
+            hint=f"Remove the extra argument(s) when calling '{func_name}()'.",
+        )
+
+
 # --- System & Module Errors ---
 
 class ImportError(BlazeError):
@@ -640,6 +856,57 @@ class CircularImportError(ImportError):
         )
         self.code = "BLZ3003"
         self.hint = "Break the cycle by moving the shared code into a separate module that both files import from."
+
+
+class ModuleNotFoundError(ImportError):
+    """Raised when an imported module cannot be found"""
+
+    def __init__(
+        self,
+        module_name: str,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            f"No module named '{module_name}'",
+            line,
+            column,
+            filename,
+        )
+        self.code = "BLZ3004"
+        self.hint = (
+            f"Check that module '{module_name}' exists and that its path "
+            "is available to BlazeLang."
+        )
+        self.args = (self.format_error(),)
+
+
+class ModuleLoadError(ImportError):
+    """Raised when an existing module cannot be loaded"""
+
+    def __init__(
+        self,
+        module_name: str,
+        reason: str = None,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        detail = f": {reason}" if reason else ""
+
+        super().__init__(
+            f"Could not load module '{module_name}'{detail}",
+            line,
+            column,
+            filename,
+        )
+        self.code = "BLZ3005"
+        self.hint = (
+            "Check that the module is valid and that all required files "
+            "are available."
+        )
+        self.args = (self.format_error(),)
 
 
 # --- Network / IO Errors ---
@@ -713,6 +980,48 @@ class PermissionErrorBlaze(FileSystemError):
             hint=f"Check that the current user has read/write access to '{path}'.",
         )
         self.code = "BLZ5003"
+
+
+class FileExistsErrorBlaze(FileSystemError):
+    """Raised when attempting to create something that already exists"""
+
+    def __init__(
+        self,
+        path: str,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            f"File or directory already exists: '{path}'",
+            line,
+            column,
+            filename,
+            hint=f"Choose a different path or remove the existing '{path}' first.",
+        )
+        self.code = "BLZ5004"
+        self.args = (self.format_error(),)
+
+
+class OSErrorBlaze(FileSystemError):
+    """Raised for general operating-system filesystem errors"""
+
+    def __init__(
+        self,
+        message: str,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ):
+        super().__init__(
+            message,
+            line,
+            column,
+            filename,
+            hint="Check the path, operating-system permissions, and filesystem state.",
+        )
+        self.code = "BLZ5005"
+        self.args = (self.format_error(),)
 
 
 class JSONError(BlazeError):
@@ -819,6 +1128,20 @@ class ErrorFormatter:
             "UnknownStructFieldError": "Check the spelling of the field name, or add it to the Struct.",
             "DuplicateStructArgumentError": "Provide the field either positionally or by name, not both.",
             "StructConstructionError": "Check the Struct's declared fields against the arguments passed to its constructor call.",
+            "AttributeError": "Check that the attribute exists on the target object and that its name is spelled correctly.",
+            "ValueError": "Check that the value provided is valid for the operation.",
+            "OverflowError": "Use smaller numeric values or split the calculation into smaller operations.",
+            "UnboundVariableError": "Initialize the variable before reading its value.",
+            "StopIterationError": "Check whether the iterator still contains a value before requesting the next item.",
+            "UnsupportedOperationError": "Check whether this operation is supported for the target value or type.",
+            "InvalidAssignmentError": "Assignments must target a variable, property, or valid index.",
+            "InvalidOperatorError": "Check that the operator is valid for both operands.",
+            "MissingArgumentError": "Provide all required arguments when calling the function.",
+            "TooManyArgumentsError": "Remove the extra arguments from the function call.",
+            "ModuleNotFoundError": "Make sure the module exists and its path is available to BlazeLang.",
+            "ModuleLoadError": "Check that the module is valid and all required files are available.",
+            "FileExistsErrorBlaze": "Choose a different path or remove the existing file or directory first.",
+            "OSErrorBlaze": "Check the filesystem path, permissions, and operating-system state.",
         }
 
         error_type = type(error).__name__
