@@ -1,0 +1,17 @@
+// BlazeLang Json Library: serialize, parse, pretty-print, and validate data.
+
+Import Json from "json"
+
+var project = {
+    name: "BlazeLang",
+    ready: true,
+    tags: ["language", "json"]
+}
+
+var text = Json.Stringify(project)
+
+Show(text)
+Show(Json.Parse(text).name)
+Show(Json.Pretty(project))
+Show(Json.Validate(text))
+Show(Json.Validate("{broken}"))

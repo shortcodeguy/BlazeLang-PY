@@ -1,9 +1,0 @@
-Import Json from "json"
-Import File from "file"
-
-var project = { name: "BlazeLang", version: "1.6" }
-File.Write("project.json", Json.Pretty(project))
-
-var loaded = Json.Parse(File.Read("project.json"))
-Show(loaded.name)
-Show(loaded.version)

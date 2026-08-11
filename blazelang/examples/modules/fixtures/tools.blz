@@ -1,0 +1,10 @@
+// Tools module exports variables and functions.
+
+Show("tools module loaded")
+
+Export var greeting = "Hello"
+Export var label = "namespace import works"
+
+Export Function add(left, right) {
+    return left + right
+}

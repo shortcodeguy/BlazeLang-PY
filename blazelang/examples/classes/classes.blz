@@ -1,0 +1,20 @@
+Class Counter {
+Constructor(start) {
+this.value = start
+}
+
+Function Increment() {
+    this.value += 1
+    return this.value
+}
+
+Function Describe() {
+    return "Counter = " + this.value
+}
+
+}
+
+var counter = Counter(4)
+
+Show(counter.Increment())
+Show(counter.Describe())

@@ -258,6 +258,14 @@ Show("This local module was loaded for its side effect.")
 
 - Declarations do not require an initializer (`var declaredLater`).
 - Array and object literals accept a trailing comma. Object keys must be identifiers.
-- `static`, `public`, and `private` are accepted only before `Function` or `Meta` inside a class; the current interpreter records the methods but does not enforce access control or give `static` methods separate storage.
-- `super` resolves the parent class. Calling a parent method that relies on `this` is not currently bound to the child instance, so the `ParentLabel` example intentionally needs no instance state.
+- `static`, `public`, and `private` are accepted before class methods and fields. Static members use class storage and private members are access-checked.
+- `super` resolves the parent class and binds parent method calls to the current child instance.
 - Comments are supported by the implementation. Semicolons are not tokenized, so omit them.
+
+## Meta lifecycle hooks
+
+Inside a class, `Meta OnCall`, `Meta Before`, `Meta OnReturn`, `Meta After`,
+and `Meta OnError` are lifecycle hooks for ordinary instance methods. Each
+receives the method name first; the second argument is respectively the call
+arguments, return value, or error text. Other `Meta Name(...)` declarations
+remain ordinary callable Meta methods. See `blazelang/examples/meta/meta_showcase.blz`.

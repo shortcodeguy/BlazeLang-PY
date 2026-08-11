@@ -1,0 +1,5 @@
+// BlazeLang Conversion Example
+Show(Int("42"))
+Show(Float("3.5"))
+Show(String(42))
+Show(Bool(1))

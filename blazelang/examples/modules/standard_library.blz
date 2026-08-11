@@ -1,0 +1,22 @@
+Import Math from "math"
+Import Random from "random"
+Import Date from "date"
+Import Time from "time"
+Import Path from "path"
+Import System from "system"
+Import Env from "env"
+Import Json from "json"
+Import File from "file"
+
+Show(Math.Sqrt(81))
+Show(Random.Int(1, 10))
+Show(Date.Today())
+Show(Time.Now())
+Show(Path.Join("examples", "standard_library.blz"))
+Show(System.Platform())
+Env.Set("BLAZELANG_EXAMPLE", "ready")
+Show(Env.Get("BLAZELANG_EXAMPLE"))
+Show(Json.Stringify({ library: "standard" }))
+File.Write("stdlib_example.txt", "temporary example file")
+Show(File.Read("stdlib_example.txt"))
+File.Delete("stdlib_example.txt")

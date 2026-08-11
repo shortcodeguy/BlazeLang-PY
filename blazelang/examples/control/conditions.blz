@@ -1,0 +1,11 @@
+var score = 82
+
+if score >= 90 {
+    Show("excellent")
+}
+else if score >= 60 {
+    Show("passed")
+}
+else {
+    Show("try again")
+}

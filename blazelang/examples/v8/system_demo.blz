@@ -1,5 +1,0 @@
-Import System from "system"
-
-Show(System.Platform())
-Show(System.Version())
-Show(System.CurrentDirectory())

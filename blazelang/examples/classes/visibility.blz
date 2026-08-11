@@ -1,0 +1,13 @@
+// Public methods can safely expose private state.
+
+Class Vault {
+    private var code = "safe"
+
+    Function Read() {
+        return this.code
+    }
+}
+
+var vault = Vault()
+
+Show(vault.Read())

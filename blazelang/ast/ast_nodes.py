@@ -136,6 +136,19 @@ class FunctionDeclaration(ASTNode):
 
 
 @dataclass
+class MetaHookDeclaration(ASTNode):
+    """A class-level Meta lifecycle hook.
+
+    Hooks are deliberately separate from ordinary ``Meta Name(...)`` methods so
+    the latter retain their established behaviour.  The supported hook names
+    are OnCall, Before, OnReturn, After, and OnError.
+    """
+    hook_name: str
+    parameters: List[str]
+    body: BlockStatement
+
+
+@dataclass
 class ClassDeclaration(ASTNode):
     """Class declaration"""
     name: str

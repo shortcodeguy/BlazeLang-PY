@@ -1,0 +1,17 @@
+Function Divide(left, right) {
+    if right == 0 {
+        throw "Cannot divide by zero"
+    }
+
+    return left / right
+}
+
+try {
+    Show(Divide(10, 0))
+}
+catch (error) {
+    Show("Caught: " + error)
+}
+finally {
+    Show("Cleanup always runs")
+}

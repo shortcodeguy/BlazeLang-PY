@@ -508,6 +508,15 @@ class Parser:
 
             if self.current_token.type == TokenType.META:
                 func = self.parse_function_declaration(is_meta=True)
+                # A small, explicit hook vocabulary avoids changing the
+                # long-standing meaning of ordinary class Meta methods.
+                if func.name in ('OnCall', 'Before', 'OnReturn', 'After', 'OnError'):
+                    members.append(MetaHookDeclaration(
+                        hook_name=func.name,
+                        parameters=func.parameters,
+                        body=func.body,
+                    ))
+                    continue
                 func.is_static = is_static
                 func.access_modifier = access_modifier
                 func.had_explicit_modifier = saw_modifier

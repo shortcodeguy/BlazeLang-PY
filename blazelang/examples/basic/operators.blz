@@ -1,0 +1,4 @@
+// BlazeLang Operators Example
+var score = 8
+Show(score + 2)
+Show(score >= 5 and score < 10)

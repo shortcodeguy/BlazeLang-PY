@@ -1,0 +1,11 @@
+// Default-exported User class.
+
+Export Default Class User {
+    Constructor(name) {
+        this.name = name
+    }
+
+    Function Name() {
+        return this.name
+    }
+}

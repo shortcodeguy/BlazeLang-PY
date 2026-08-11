@@ -1,0 +1,7 @@
+// BlazeLang Null Example
+
+var selected = null
+
+if selected == null {
+Show("Nothing selected yet")
+}

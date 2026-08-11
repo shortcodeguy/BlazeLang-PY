@@ -1,0 +1,7 @@
+// A tiny calculator using variables and arithmetic.
+
+var first = 12
+var second = 3
+
+Show("sum: " + (first + second))
+Show("product: " + (first * second))

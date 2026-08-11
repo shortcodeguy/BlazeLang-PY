@@ -1,0 +1,15 @@
+Class MathTools {
+    static constant NAME = "MathTools"
+
+    static Function Square(value) {
+        return value * value
+    }
+
+    static Function Cube(value) {
+        return value * value * value
+    }
+}
+
+Show(MathTools.NAME)
+Show(MathTools.Square(9))
+Show(MathTools.Cube(3))

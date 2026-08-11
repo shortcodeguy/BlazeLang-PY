@@ -1,0 +1,3 @@
+// BlazeLang Constants Example
+constant APP_NAME = "Study Helper"
+Show(APP_NAME)

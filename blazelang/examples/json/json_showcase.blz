@@ -1,0 +1,18 @@
+// Import JSON module.
+Import Json from "json"
+
+var project = {
+    name: "BlazeLang",
+    active: true,
+    releases: ["1.0", "1.7"]
+}
+
+var text = Json.Stringify(project)
+
+Show(text)
+Show(Json.Pretty(project))
+Show(Json.Validate(text))
+
+var restored = Json.Parse(text)
+
+Show(restored.name)

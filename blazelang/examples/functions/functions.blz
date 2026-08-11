@@ -1,0 +1,14 @@
+Function Add(left, right) {
+    return left + right
+}
+
+Function Factorial(n) {
+    if n <= 1 {
+        return 1
+    }
+
+    return n * Factorial(n - 1)
+}
+
+Show(Add(2, 3))
+Show(Factorial(5))

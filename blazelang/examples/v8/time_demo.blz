@@ -1,5 +1,0 @@
-Import Time from "time"
-
-Show(Time.Now())
-Show(Time.Hour())
-Time.Sleep(10)

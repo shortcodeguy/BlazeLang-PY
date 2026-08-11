@@ -1,0 +1,13 @@
+// BlazeLang Path and System Library: portable paths and runtime information.
+Import Path from "path"
+Import System from "system"
+var filePath = Path.Join("examples", "stdlib", "math.blz")
+Show(Path.Normalize(filePath))
+Show(Path.FileName(filePath))
+Show(Path.Directory(filePath))
+Show(Path.Extension(filePath))
+Show(Path.Parent(filePath))
+Show(System.Platform())
+Show(System.Version())
+Show(System.CurrentDirectory())
+Show(System.Arguments())

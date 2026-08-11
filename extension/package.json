@@ -2,7 +2,7 @@
   "name": "blazelang",
   "displayName": "BlazeLang",
   "description": "First-class language support for BlazeLang (.blz) files.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "ShortCodeGuyStudio",
   "license": "MIT",
   "repository": {

@@ -1,6 +1,0 @@
-Import Math from "math"
-
-Show(Math.Sqrt(81))
-Show(Math.Pow(2, 8))
-Show(Math.Clamp(120, 0, 100))
-Show(Math.PI)

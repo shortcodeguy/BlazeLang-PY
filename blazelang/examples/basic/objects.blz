@@ -1,0 +1,13 @@
+var user = {
+name: "Asha",
+active: true,
+skills: ["BlazeLang", "JSON"]
+}
+
+user.name = "Mira"
+user.points = 10
+user.points += 5
+
+Show(user.name)
+Show(user.skills[0])
+Show(user.points)

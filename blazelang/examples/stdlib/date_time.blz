@@ -1,0 +1,14 @@
+// BlazeLang Date and Time Library: local calendar and clock information.
+Import Date from "date"
+Import Time from "time"
+Show(Date.Today())
+Show(Date.Year())
+Show(Date.Month())
+Show(Date.Day())
+Show(Date.Weekday())
+Show(Date.Format("yyyy-MM-dd"))
+Show(Time.Now())
+Show(Time.Hour())
+Show(Time.Minute())
+Show(Time.Second())
+// Time.Sleep(250) is available when a deliberate millisecond delay is useful.

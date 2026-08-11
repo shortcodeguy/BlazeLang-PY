@@ -1,4 +1,0 @@
-Import File from "file"
-
-var text = File.Read("missing-config.json")
-Show(text)

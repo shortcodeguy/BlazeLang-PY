@@ -1,0 +1,4 @@
+// Make numbers with range.
+for number in range(1, 4) {
+    Show(number)
+}

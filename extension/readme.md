@@ -26,15 +26,6 @@ The formatter uses four spaces by default; set `blazelang.format.indentSize` to 
 
 This extension follows the current BlazeLang lexer/parser: blocks use braces, `Function`, `Meta`, `Class`, and `Constructor` are capitalized, `Break`/`Continue` are capitalized, and statements do **not** use semicolons. Both `//` and `/* ... */` comments are supported by the lexer. `async`, `await`, `protected`, and `override` are reserved but not implemented by BlazeLang, so the extension does not suggest them.
 
-## Development
-
-```text
-npm install
-npm run compile
-npm run lint
-npm run package
-```
-
 Press `F5` in VS Code to launch an Extension Development Host.
 
 ## License

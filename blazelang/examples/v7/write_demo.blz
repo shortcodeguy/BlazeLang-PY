@@ -1,4 +1,0 @@
-Import File from "file"
-
-File.Write("hello.txt", "Hello BlazeLang!")
-Show("File created successfully.")

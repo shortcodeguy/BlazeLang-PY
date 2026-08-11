@@ -1,0 +1,9 @@
+// Variables, constants, booleans, and null.
+var language = "BlazeLang"
+constant VERSION = "1.7"
+var enabled = true
+var optionalValue = null
+
+Show(language + " " + VERSION)
+Show(enabled)
+Show(optionalValue)

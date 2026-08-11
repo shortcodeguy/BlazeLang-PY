@@ -1,5 +1,0 @@
-Import Random from "random"
-
-Show(Random.Int(1, 100))
-Show(Random.Bool())
-Show(Random.String(12))

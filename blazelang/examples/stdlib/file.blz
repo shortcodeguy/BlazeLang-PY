@@ -1,0 +1,17 @@
+// BlazeLang File Library: a complete safe file lifecycle in `file_demo`.
+Import File from "file"
+File.CreateDirectory("file_demo")
+File.Write("file_demo/note.txt", "First line\n")
+File.Append("file_demo/note.txt", "Second line\n")
+Show(File.Exists("file_demo/note.txt"))
+Show(File.Read("file_demo/note.txt"))
+Show(File.Size("file_demo/note.txt"))
+Show(File.Extension("file_demo/note.txt"))
+File.Copy("file_demo/note.txt", "file_demo/copy.txt")
+File.Move("file_demo/copy.txt", "file_demo/moved.txt")
+File.Rename("file_demo/moved.txt", "file_demo/final.txt")
+Show(File.ListFiles("file_demo"))
+Show(File.ListDirectories("."))
+File.Delete("file_demo/final.txt")
+File.Delete("file_demo/note.txt")
+File.DeleteDirectory("file_demo", false)

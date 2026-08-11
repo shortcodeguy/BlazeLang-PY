@@ -1,0 +1,11 @@
+var colors = ["red", "green", "blue"]
+
+colors[1] = "lime"
+colors = colors + ["violet"]
+
+Show(colors)
+Show(colors[0])
+
+for color in colors {
+    Show(color)
+}

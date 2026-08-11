@@ -1,0 +1,9 @@
+// BlazeLang Random Library: numbers, choices, shuffling, and IDs.
+Import Random from "random"
+var colors = ["red", "green", "blue"]
+Show(Random.Int(1, 6))
+Show(Random.Float())
+Show(Random.Bool())
+Show(Random.Choice(colors))
+Show(Random.Shuffle(colors))
+Show(Random.String(12))

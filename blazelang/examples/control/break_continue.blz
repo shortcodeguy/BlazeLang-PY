@@ -1,0 +1,13 @@
+// Skip one number and stop early.
+
+for number in range(0, 8) {
+    if number == 2 {
+        Continue
+    }
+
+    if number == 5 {
+        Break
+    }
+
+    Show(number)
+}

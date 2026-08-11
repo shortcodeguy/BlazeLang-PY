@@ -1,0 +1,30 @@
+Class Animal {
+Constructor(name) {
+this.name = name
+}
+
+Function Speak() {
+    return this.name + " makes a sound"
+}
+
+}
+
+Class Dog: Animal {
+Constructor(name) {
+this.name = name
+}
+
+Function Speak() {
+    return this.name + " says woof"
+}
+
+Function ParentSpeak() {
+    return super.Speak()
+}
+
+}
+
+var dog = Dog("Max")
+
+Show(dog.Speak())
+Show(dog.ParentSpeak())

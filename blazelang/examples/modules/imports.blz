@@ -1,0 +1,10 @@
+// Each import form is exercised with the local fixture modules below.
+Import DefaultUser from "fixtures/user.blz"
+Import * as Tools from "fixtures/tools.blz"
+Import { greeting as hello, add as sum } from "fixtures/tools.blz"
+Import "fixtures/side_effect.blz"
+
+var user = DefaultUser("Asha")
+Show(hello + ", " + user.Name())
+Show(sum(4, 5))
+Show(Tools.label)

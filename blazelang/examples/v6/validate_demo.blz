@@ -1,8 +1,0 @@
-Import Json from "json"
-
-var valid = "{\"name\":\"Rohit\"}"
-var invalid = "{name: Rohit}"
-var isValid = Json.Validate(valid)
-var isInvalid = Json.Validate(invalid)
-Show("Valid JSON: {isValid}")
-Show("Invalid JSON: {isInvalid}")

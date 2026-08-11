@@ -1,0 +1,21 @@
+var total = 0
+var counter = 0
+
+while counter < 3 {
+    total += counter
+    counter += 1
+}
+
+Show("while total: " + total)
+
+for number in range(0, 8) {
+    if number == 2 {
+        Continue
+    }
+
+    if number == 6 {
+        Break
+    }
+
+    Show("range: " + number)
+}

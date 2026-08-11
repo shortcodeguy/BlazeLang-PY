@@ -405,9 +405,7 @@ Class Calculator {
         var time = Input("Time: ")
         var acceleration = Input("Acceleration: ")
 
-        var distance =
-            velocity * time +
-            0.5 * acceleration * Math.Pow(time, 2)
+        var distance = velocity * time + 0.5 * acceleration * Math.Pow(time, 2)
 
         Show("Distance:")
         Show(distance)

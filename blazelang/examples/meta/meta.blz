@@ -1,0 +1,67 @@
+// Meta lifecycle hooks are declared inside a class with these exact names:
+// OnCall, Before, OnReturn, After, and OnError.
+// Each receives the method name first. The remaining value is
+// arguments, return value, or error.
+
+Meta Label(method) {
+    return "[Meta] " + method
+}
+
+Class Calculator {
+    Constructor(value) {
+        this.value = value
+    }
+
+    Meta OnCall(method, arguments) {
+        Show(Label("OnCall " + method))
+    }
+
+    Meta Before(method, arguments) {
+        Show(Label("Before " + method))
+    }
+
+    Meta OnReturn(method, value) {
+        Show(Label(method + " returned " + value))
+    }
+
+    Meta After(method, value) {
+        Show(Label("After " + method))
+    }
+
+    Meta OnError(method, error) {
+        Show(Label("OnError " + method))
+        Show(Label(error))
+    }
+
+    // This remains an ordinary, callable Meta method for compatibility.
+    Meta Describe() {
+        Show(Label("Calculator value " + this.value))
+    }
+
+    Function Add(amount) {
+        this.value += amount
+        return this.value
+    }
+
+    Function Divide(amount) {
+        return this.value / amount
+    }
+}
+
+Show("========== META SHOWCASE ==========")
+
+var calculator = Calculator(10)
+
+calculator.Describe()
+
+Show(calculator.Add(5))
+Show(calculator.Divide(3))
+
+try {
+    calculator.Divide(0)
+}
+catch (error) {
+    Show("[Meta] Division by zero was handled by the caller")
+}
+
+Show("========== META TEST COMPLETE ==========")

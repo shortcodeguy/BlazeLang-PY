@@ -1,0 +1,5 @@
+var title = "  blaze language  "
+Show(Upper(Trim(title)))
+Show(Replace(title, "language", "Lang"))
+Show(Join(Split("red,green,blue", ","), " | "))
+Show("Characters: " + len(title))

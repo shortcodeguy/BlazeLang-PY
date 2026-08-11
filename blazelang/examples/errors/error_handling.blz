@@ -1,0 +1,10 @@
+// Catch an expected error and always finish cleanup.
+try {
+    throw "An example problem"
+}
+catch (error) {
+    Show("Caught: " + error)
+}
+finally {
+    Show("Finished safely")
+}

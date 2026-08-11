@@ -1,0 +1,6 @@
+Import Http from "http"
+// This uses a public test endpoint. Network access is required to run it.
+var response = Http.Get("https://jsonplaceholder.typicode.com/todos/1")
+Show(response.status)
+Show(response.ok)
+Show(response.body)

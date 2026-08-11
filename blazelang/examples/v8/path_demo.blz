@@ -1,5 +1,0 @@
-Import Path from "path"
-
-var path = Path.Join("src", "main.blz")
-Show(path)
-Show(Path.Extension(path))

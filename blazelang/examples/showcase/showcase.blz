@@ -1,0 +1,138 @@
+// One practical tour of the language.
+// Use the focused examples for detail.
+
+Import Math from "math"
+Import Random from "random"
+Import Date from "date"
+Import Time from "time"
+Import Path from "path"
+Import System from "system"
+Import Env from "env"
+Import Json from "json"
+Import File from "file"
+Import Http from "http"
+Import HttpServer from "httpserver"
+
+constant VERSION = "1.7"
+
+var missing = null
+var name = Input("Name (press Enter to skip): ")
+var values = [1, 2, 3]
+var profile = {
+    name: name,
+    version: VERSION
+}
+
+values[0] += 9
+
+Show("Hello " + profile.name + "; first = " + values[0])
+Show("Converted: " + String(Int("7")) + ", " + Float("2.5"))
+
+if missing == null {
+    Show("null is supported")
+}
+
+var sum = 0
+var cursor = 0
+
+while cursor < 3 {
+    sum += cursor
+    cursor += 1
+}
+
+for number in range(0, 6) {
+    if number == 1 {
+        Continue
+    }
+
+    if number == 5 {
+        Break
+    }
+
+    Show(number)
+}
+
+Function Factorial(n) {
+    if n <= 1 {
+        return 1
+    }
+
+    return n * Factorial(n - 1)
+}
+
+Show("factorial: " + Factorial(5))
+
+try {
+    if sum == 3 {
+        throw "demonstration error"
+    }
+}
+catch (error) {
+    Show("caught: " + error)
+}
+finally {
+    Show("finally runs")
+}
+
+Class Parent {
+    Constructor(label) {
+        this.label = label
+    }
+
+    Function Label() {
+        return this.label
+    }
+}
+
+Class Child: Parent {
+    private var secret = "inside"
+
+    static Function Create(label) {
+        return Child(label)
+    }
+
+    Constructor(label) {
+        this.label = label
+    }
+
+    Function Describe() {
+        return super.Label() + " / " + this.secret
+    }
+}
+
+var child = Child.Create("class and super")
+
+Show(child.Describe())
+
+Struct Point {
+    x
+    y
+    tag = null
+}
+
+var point = Point(3, 4)
+
+point.x += 1
+
+Show(Json.Stringify(point))
+
+Show(Math.Pow(2, 8))
+Show(Random.Int(1, 10))
+Show(Date.Today())
+Show(Time.Now())
+Show(Path.Join("examples", "mega"))
+Show(System.Platform())
+
+Env.Set("BLAZELANG_MEGA", "ready")
+
+Show(Env.Get("BLAZELANG_MEGA"))
+
+File.Write("mega_example.txt", "temporary")
+Show(File.Read("mega_example.txt"))
+File.Delete("mega_example.txt")
+
+Show("HTTP client available: " + type(Http))
+Show("HTTP server available: " + type(HttpServer))
+
+Show("Meta lifecycle: see examples/meta/meta_showcase.blz")
+Show("========== MEGA SHOWCASE COMPLETE ==========")

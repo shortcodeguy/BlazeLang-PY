@@ -1,5 +1,5 @@
 #define MyAppName "BlazeLang"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.7.0"
 #define MyAppPublisher "ShortCodeGuy Studio"
 
 [Setup]

@@ -1,0 +1,9 @@
+// Choose a message with if / else.
+var age = 18
+
+if age >= 18 {
+    Show("adult")
+}
+else {
+    Show("minor")
+}

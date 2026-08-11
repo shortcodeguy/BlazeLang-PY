@@ -1,9 +1,0 @@
-Show("Greeting module loaded")
-
-Export Function greet(name) {
-    return "Hello, " + name + "!"
-}
-
-Export Function farewell(name) {
-    return "Goodbye, " + name + "!"
-}

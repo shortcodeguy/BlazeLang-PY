@@ -25,6 +25,7 @@ from blazelang.errors.error_handler import (
     DuplicateStructArgumentError,
     StructConstructionError,
     StructInheritanceError,
+    IndexError as BlazeIndexError,
 )
 from typing import Any, Callable, Dict, List
 import re
@@ -107,14 +108,40 @@ class Function:
                     'constant': False
                 }
 
+        # Lifecycle hooks apply to normal instance methods only.  Meta hooks
+        # themselves and legacy Meta methods never re-enter this path.
+        hooks = None
+        if self.is_method and not self.is_meta and self.owner_class:
+            hooks = self.owner_class.meta_hooks
+
+        def run_hook(hook_name, hook_arguments):
+            hook = hooks.get(hook_name) if hooks else None
+            if hook:
+                return hook(interpreter, hook_arguments, instance_scope)
+
         interpreter.call_stack.append(f"{self.name}()")
         try:
-            result = interpreter.visit(self.body)
-            if self.is_meta:
+            if hooks:
+                run_hook('OnCall', [self.name, arguments])
+                run_hook('Before', [self.name, arguments])
+            returned_explicitly = False
+            try:
+                result = interpreter.visit(self.body)
+            except ReturnException as ret:
+                result = ret.value
+                returned_explicitly = True
+            except Exception as error:
+                if hooks:
+                    run_hook('OnError', [self.name, str(error)])
+                raise
+            if hooks:
+                run_hook('OnReturn', [self.name, result])
+                run_hook('After', [self.name, result])
+            # Legacy Meta functions are statement-like unless they explicitly
+            # return a value (HTTP handlers rely on that established form).
+            if self.is_meta and not returned_explicitly:
                 return None
             return result
-        except ReturnException as ret:
-            return ret.value
         finally:
             interpreter.call_stack.pop()
             interpreter.current_scope = previous_scope
@@ -134,6 +161,9 @@ class Class:
         self.parent_class = parent_class
         self.methods = {}
         self.static_members = {}
+        # Hook name -> Function.  Each hook receives method name first, then
+        # arguments/result/error as appropriate.
+        self.meta_hooks = {}
         # Declared `var`/`constant` fields at the class level: name -> dict with
         # 'default' (the unevaluated default-value AST node), 'visibility'
         # ('public'/'private'/'protected'/'default'), 'is_constant', and
@@ -268,6 +298,13 @@ class BoundMethod:
 
     def __repr__(self):
         return self.__str__()
+
+
+class SuperProxy:
+    """The parent-class view of an instance used by ``super.Method()``."""
+    def __init__(self, parent_class: Class, instance: Instance):
+        self.parent_class = parent_class
+        self.instance = instance
 
 
 def _struct_display_value(value: Any) -> str:
@@ -708,6 +745,14 @@ class Interpreter:
                 else:
                     func.is_method = True
                     cls.methods[member.name] = func
+            elif isinstance(member, MetaHookDeclaration):
+                cls.meta_hooks[member.hook_name] = Function(
+                    name=member.hook_name,
+                    parameters=member.parameters,
+                    body=member.body,
+                    closure=dict(self.current_scope),
+                    owner_class=cls,
+                )
             elif isinstance(member, VariableDeclaration):
                 # A `var`/`constant` field declared directly in the class body,
                 # e.g. `public var name = "Rohit"` or `private var secret`.
@@ -1086,6 +1131,13 @@ class Interpreter:
     def visit_PropertyAccess(self, node: PropertyAccess) -> Any:
         obj = self.visit(node.object)
 
+        if isinstance(obj, SuperProxy):
+            method = obj.parent_class.methods.get(node.property)
+            if method is None:
+                raise PropertyError(node.property, f"parent class '{obj.parent_class.name}'")
+            self._check_member_access(method, node.property)
+            return BoundMethod(method, obj.instance)
+
         if isinstance(obj, dict):
             return obj.get(node.property)
 
@@ -1154,7 +1206,10 @@ class Interpreter:
 
         if isinstance(array, (list, str)):
             idx = int(index)
-            return array[idx]
+            try:
+                return array[idx]
+            except IndexError:
+                raise BlazeIndexError(idx, len(array))
 
         if isinstance(array, dict):
             return array.get(index)
@@ -1172,7 +1227,7 @@ class Interpreter:
 
         instance = self.current_scope['this']['value']
         if instance.cls.parent_class:
-            return instance.cls.parent_class
+            return SuperProxy(instance.cls.parent_class, instance)
         raise BlazeRuntimeError(f"Class '{instance.cls.name}' has no parent class to call 'super' on")
 
     def visit_ImportStatement(self, node: ImportStatement) -> None:

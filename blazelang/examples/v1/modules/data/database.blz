@@ -1,3 +1,0 @@
-Show("Loading database module")
-
-Export constant DATABASE_NAME = "blaze_demo"

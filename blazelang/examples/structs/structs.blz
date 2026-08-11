@@ -1,0 +1,12 @@
+// Structs hold simple data with defaults.
+
+Struct Student {
+    name
+    grade = 0
+}
+
+var student = Student("Asha")
+
+student.grade = 95
+
+Show(student.name + ": " + student.grade)
