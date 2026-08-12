@@ -11,6 +11,12 @@ from blazelang.errors.error_handler import (
     StructMethodNotAllowedError,
     StructConstructorNotAllowedError,
     StructInheritanceError,
+    InvalidAttributeSyntaxError,
+    UndefinedAttributeError,
+    DuplicateAttributeDefinitionError,
+    DuplicateAttributeUsageError,
+    InvalidAttributeArgumentsError,
+    AttributeTargetError,
 )
 from blazelang.ast.ast_nodes import *
 
@@ -23,6 +29,8 @@ class Parser:
         self.position = 0
         self.current_token = tokens[0] if tokens else None
         self.filename = self.current_token.filename if self.current_token else None
+        # name -> list of declared parameter names, populated by 'Define @name(...)'.
+        self.defined_attributes = {}
     
     def advance(self):
         """Move to next token"""
@@ -188,6 +196,16 @@ class Parser:
         if token.type == TokenType.THROW:
             return self.parse_throw_statement()
         
+        # Custom attributes: 'Define @name' / 'Define @name(...)'
+        if token.type == TokenType.DEFINE:
+            return self.parse_attribute_definition()
+
+        # Custom attributes attached to a Function/Meta/Class declaration:
+        # '@name' / '@name(...)', possibly several stacked in a row.
+        if token.type == TokenType.AT:
+            attributes = self.parse_attribute_usages()
+            return self.parse_attributable_declaration(attributes)
+
         # Functions and classes
         if token.type == TokenType.META:
             return self.parse_function_declaration(is_meta=True)
@@ -431,6 +449,135 @@ class Parser:
             finally_block=finally_block
         )
     
+    # =====================
+    # Custom Attributes
+    # =====================
+
+    def parse_attribute_definition(self):
+        """Parse 'Define @name' or 'Define @name(param, ...)'.
+
+        This only registers the attribute's name and parameter list so it
+        can later be attached with '@name' / '@name(args)' -- it does not
+        execute or attach anything itself.
+        """
+        start_token = self.current_token
+        self.advance()  # Skip Define
+
+        if not self.match(TokenType.AT):
+            found = self.current_token.type.name if self.current_token else 'EOF'
+            raise InvalidAttributeSyntaxError(
+                f"expected '@' after 'Define', but found {found}",
+                start_token.line, start_token.column, self.filename,
+            )
+        self.advance()  # Skip @
+
+        if not self.match(TokenType.IDENTIFIER):
+            found = self.current_token.type.name if self.current_token else 'EOF'
+            raise InvalidAttributeSyntaxError(
+                f"expected an attribute name after '@', but found {found}",
+                start_token.line, start_token.column, self.filename,
+            )
+        name_token = self.current_token
+        name = name_token.value
+        self.advance()
+
+        parameters = []
+        if self.match(TokenType.LPAREN):
+            self.advance()  # Skip (
+            if not self.match(TokenType.RPAREN):
+                param_token = self.expect(TokenType.IDENTIFIER)
+                parameters.append(param_token.value)
+                while self.match(TokenType.COMMA):
+                    self.advance()  # Skip comma
+                    param_token = self.expect(TokenType.IDENTIFIER)
+                    parameters.append(param_token.value)
+            self.expect(TokenType.RPAREN)
+
+        if name in self.defined_attributes:
+            raise DuplicateAttributeDefinitionError(name, name_token.line, name_token.column, self.filename)
+
+        self.defined_attributes[name] = parameters
+
+        return self._tag(AttributeDefinition(name=name, parameters=parameters), start_token)
+
+    def parse_attribute_usages(self):
+        """Parse one or more consecutive '@name' / '@name(args)' usages
+        immediately preceding a Function/Meta/Class declaration. Returns a
+        list of AttributeUsage nodes (arguments left unevaluated -- they're
+        evaluated at runtime like any other expression)."""
+        usages = []
+        seen = set()
+
+        while self.match(TokenType.AT):
+            at_token = self.current_token
+            self.advance()  # Skip @
+
+            if not self.match(TokenType.IDENTIFIER):
+                found = self.current_token.type.name if self.current_token else 'EOF'
+                raise InvalidAttributeSyntaxError(
+                    f"expected an attribute name after '@', but found {found}",
+                    at_token.line, at_token.column, self.filename,
+                )
+            name_token = self.current_token
+            name = name_token.value
+            self.advance()
+
+            if name not in self.defined_attributes:
+                raise UndefinedAttributeError(
+                    name, name_token.line, name_token.column, self.filename,
+                    known_names=list(self.defined_attributes.keys()),
+                )
+
+            arguments = []
+            if self.match(TokenType.LPAREN):
+                self.advance()  # Skip (
+                if not self.match(TokenType.RPAREN):
+                    arguments.append(self.parse_expression())
+                    while self.match(TokenType.COMMA):
+                        self.advance()  # Skip comma
+                        if self.match(TokenType.RPAREN):
+                            break  # Allow trailing comma
+                        arguments.append(self.parse_expression())
+                self.expect(TokenType.RPAREN)
+
+            expected_params = self.defined_attributes[name]
+            if len(arguments) != len(expected_params):
+                raise InvalidAttributeArgumentsError(
+                    name, len(expected_params), len(arguments),
+                    name_token.line, name_token.column, self.filename,
+                )
+
+            if name in seen:
+                raise DuplicateAttributeUsageError(name, name_token.line, name_token.column, self.filename)
+            seen.add(name)
+
+            usages.append(self._tag(AttributeUsage(name=name, arguments=arguments), name_token))
+
+        return usages
+
+    def parse_attributable_declaration(self, attributes):
+        """Parse the Function/Meta/Class declaration that a stack of
+        '@name' attributes was written above, and attach them to it."""
+        token = self.current_token
+        if token is None or token.type not in (TokenType.META, TokenType.FUNCTION, TokenType.CLASS):
+            found = token.type.name if token else 'EOF'
+            raise AttributeTargetError(
+                f"'{found}' (attributes may only be applied to a Function, Meta, or Class declaration)",
+                attributes[0].line if attributes else None,
+                attributes[0].column if attributes else None,
+                self.filename,
+            )
+
+        if token.type == TokenType.META:
+            declaration = self.parse_function_declaration(is_meta=True)
+        elif token.type == TokenType.FUNCTION:
+            declaration = self.parse_function_declaration(is_meta=False)
+        else:
+            declaration = self.parse_class_declaration()
+
+        declaration.attributes = attributes
+        return declaration
+
     def parse_function_declaration(self, is_meta: bool):
         """Parse Meta or Function declaration"""
         self.advance()  # Skip Meta/Function
@@ -478,7 +625,20 @@ class Parser:
         
         members = []
         while self.current_token and self.current_token.type != TokenType.RBRACE:
+            # Custom attributes attached directly to a class member, e.g.
+            # '@logged' above 'Function Create(...)'.
+            member_attributes = []
+            if self.current_token.type == TokenType.AT:
+                member_attributes = self.parse_attribute_usages()
+
+            if self.current_token is None:
+                break
+
             if self.current_token.type == TokenType.CONSTRUCTOR:
+                if member_attributes:
+                    raise AttributeTargetError(
+                        "a Constructor", member_attributes[0].line, member_attributes[0].column, self.filename,
+                    )
                 members.append(self.parse_constructor())
                 continue
 
@@ -511,6 +671,11 @@ class Parser:
                 # A small, explicit hook vocabulary avoids changing the
                 # long-standing meaning of ordinary class Meta methods.
                 if func.name in ('OnCall', 'Before', 'OnReturn', 'After', 'OnError'):
+                    if member_attributes:
+                        raise AttributeTargetError(
+                            "a Meta lifecycle hook", member_attributes[0].line,
+                            member_attributes[0].column, self.filename,
+                        )
                     members.append(MetaHookDeclaration(
                         hook_name=func.name,
                         parameters=func.parameters,
@@ -520,14 +685,20 @@ class Parser:
                 func.is_static = is_static
                 func.access_modifier = access_modifier
                 func.had_explicit_modifier = saw_modifier
+                func.attributes = member_attributes
                 members.append(func)
             elif self.current_token.type == TokenType.FUNCTION:
                 func = self.parse_function_declaration(is_meta=False)
                 func.is_static = is_static
                 func.access_modifier = access_modifier
                 func.had_explicit_modifier = saw_modifier
+                func.attributes = member_attributes
                 members.append(func)
             elif self.current_token.type == TokenType.VAR:
+                if member_attributes:
+                    raise AttributeTargetError(
+                        "a 'var' field", member_attributes[0].line, member_attributes[0].column, self.filename,
+                    )
                 field = self.parse_variable_declaration(
                     is_constant=False,
                     visibility=access_modifier if saw_modifier else 'default',
@@ -536,6 +707,10 @@ class Parser:
                 field.is_static = is_static
                 members.append(field)
             elif self.current_token.type == TokenType.CONSTANT:
+                if member_attributes:
+                    raise AttributeTargetError(
+                        "a 'constant' field", member_attributes[0].line, member_attributes[0].column, self.filename,
+                    )
                 field = self.parse_variable_declaration(
                     is_constant=True,
                     visibility=access_modifier if saw_modifier else 'default',
@@ -543,6 +718,11 @@ class Parser:
                 )
                 field.is_static = is_static
                 members.append(field)
+            elif member_attributes:
+                # Attributes were consumed but nothing valid followed them.
+                raise AttributeTargetError(
+                    "this class member", member_attributes[0].line, member_attributes[0].column, self.filename,
+                )
             elif saw_modifier:
                 # Modifiers were consumed but nothing valid followed them
                 # (e.g. "public" applied to something unsupported) - skip

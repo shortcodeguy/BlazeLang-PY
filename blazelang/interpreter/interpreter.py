@@ -51,11 +51,38 @@ class ContinueException(Exception):
     pass
 
 
-class Function:
+class AttributeHolder:
+    """Shared, beginner-friendly API for inspecting custom attributes
+    (`@name` / `@name(args)`) attached to a Function or Class.
+
+    Attributes are pure metadata: attaching one never runs any code by
+    itself. `self.attributes` maps attribute name -> list of already
+    evaluated argument values (empty list for a bare '@name').
+    """
+
+    def hasAttribute(self, name: str) -> bool:
+        return name in self.attributes
+
+    def getAttribute(self, name: str):
+        if name not in self.attributes:
+            return None
+        args = self.attributes[name]
+        if not args:
+            return True       # bare attribute, e.g. @logged
+        if len(args) == 1:
+            return args[0]    # single-argument attribute, e.g. @role("admin")
+        return list(args)     # multi-argument attribute
+
+    def getAttributes(self) -> list:
+        return list(self.attributes.keys())
+
+
+class Function(AttributeHolder):
     """Represents a BlazeLang function"""
     def __init__(self, name: str, parameters: List[str], body: BlockStatement,
                  is_meta: bool = False, closure: Dict = None,
-                 owner_class=None, access_modifier: str = 'public'):
+                 owner_class=None, access_modifier: str = 'public',
+                 attributes: Dict[str, list] = None):
         self.name = name
         self.parameters = parameters
         self.body = body
@@ -63,6 +90,8 @@ class Function:
         self.closure = closure or {}
         self.is_method = False
         self.owner_class = owner_class          # Class this method belongs to (or None for free functions)
+        # name -> list of evaluated argument values; see AttributeHolder.
+        self.attributes = attributes or {}
         # Meta functions (constructors) are always public. Private and static
         # modifiers only ever apply to regular methods -- a constructor must be
         # reachable from anywhere a class can be instantiated, so we normalize
@@ -119,11 +148,16 @@ class Function:
             if hook:
                 return hook(interpreter, hook_arguments, instance_scope)
 
+        # A string that also carries this method's custom attributes, so a
+        # Meta hook can do `method.hasAttribute("role")` while everything
+        # that just treats it as the method's name keeps working.
+        method_token = MethodName(self.name, self.attributes) if hooks else self.name
+
         interpreter.call_stack.append(f"{self.name}()")
         try:
             if hooks:
-                run_hook('OnCall', [self.name, arguments])
-                run_hook('Before', [self.name, arguments])
+                run_hook('OnCall', [method_token, arguments])
+                run_hook('Before', [method_token, arguments])
             returned_explicitly = False
             try:
                 result = interpreter.visit(self.body)
@@ -132,11 +166,11 @@ class Function:
                 returned_explicitly = True
             except Exception as error:
                 if hooks:
-                    run_hook('OnError', [self.name, str(error)])
+                    run_hook('OnError', [method_token, str(error)])
                 raise
             if hooks:
-                run_hook('OnReturn', [self.name, result])
-                run_hook('After', [self.name, result])
+                run_hook('OnReturn', [method_token, result])
+                run_hook('After', [method_token, result])
             # Legacy Meta functions are statement-like unless they explicitly
             # return a value (HTTP handlers rely on that established form).
             if self.is_meta and not returned_explicitly:
@@ -154,9 +188,40 @@ class Function:
         return self.__str__()
 
 
-class Class:
+class MethodName(str):
+    """The method-name value passed as the first argument to Meta lifecycle
+    hooks (OnCall, Before, OnReturn, After, OnError). Behaves exactly like
+    the plain string it always was -- so existing hook bodies that compare
+    it, concatenate it, or Show() it keep working unchanged -- but also
+    carries the method's custom attributes so a hook can inspect them via
+    `method.hasAttribute(...)`, `method.getAttribute(...)`, and
+    `method.getAttributes()`.
+    """
+    def __new__(cls, name: str, attributes: Dict[str, list]):
+        instance = str.__new__(cls, name)
+        instance.attributes = attributes or {}
+        return instance
+
+    def hasAttribute(self, name: str) -> bool:
+        return name in self.attributes
+
+    def getAttribute(self, name: str):
+        if name not in self.attributes:
+            return None
+        args = self.attributes[name]
+        if not args:
+            return True
+        if len(args) == 1:
+            return args[0]
+        return list(args)
+
+    def getAttributes(self) -> list:
+        return list(self.attributes.keys())
+
+
+class Class(AttributeHolder):
     """Represents a BlazeLang class"""
-    def __init__(self, name: str, parent_class=None):
+    def __init__(self, name: str, parent_class=None, attributes: Dict[str, list] = None):
         self.name = name
         self.parent_class = parent_class
         self.methods = {}
@@ -164,6 +229,8 @@ class Class:
         # Hook name -> Function.  Each hook receives method name first, then
         # arguments/result/error as appropriate.
         self.meta_hooks = {}
+        # name -> list of evaluated argument values; see AttributeHolder.
+        self.attributes = attributes or {}
         # Declared `var`/`constant` fields at the class level: name -> dict with
         # 'default' (the unevaluated default-value AST node), 'visibility'
         # ('public'/'private'/'protected'/'default'), 'is_constant', and
@@ -292,6 +359,18 @@ class BoundMethod:
         """Execute the method with 'this' bound to the instance"""
         instance_scope = {'this': {'value': self.instance, 'constant': True}}
         return self.func(interpreter, arguments, instance_scope)
+
+    # Delegate custom-attribute inspection to the underlying Function so
+    # `instance.SomeMethod.hasAttribute(...)` works the same as it does on
+    # an unbound Function/Meta.
+    def hasAttribute(self, name: str) -> bool:
+        return self.func.hasAttribute(name)
+
+    def getAttribute(self, name: str):
+        return self.func.getAttribute(name)
+
+    def getAttributes(self) -> list:
+        return self.func.getAttributes()
 
     def __str__(self):
         return f"<method {self.func.name}>"
@@ -662,13 +741,29 @@ class Interpreter:
             if node.finally_block:
                 self.visit(node.finally_block)
 
+    def visit_AttributeDefinition(self, node: AttributeDefinition) -> None:
+        """'Define @name(...)' only registers the attribute at parse time
+        (Parser.defined_attributes) -- there is nothing to execute here."""
+        return None
+
+    def _eval_attributes(self, attribute_usages) -> Dict[str, list]:
+        """Evaluate a list of AttributeUsage AST nodes into name -> [values].
+        Runs once, at the point the decorated declaration executes -- the
+        same as evaluating any other expression in that scope."""
+        result = {}
+        if attribute_usages:
+            for usage in attribute_usages:
+                result[usage.name] = [self.visit(arg) for arg in usage.arguments]
+        return result
+
     def visit_FunctionDeclaration(self, node: FunctionDeclaration) -> None:
         func = Function(
             name=node.name,
             parameters=node.parameters,
             body=node.body,
             is_meta=node.is_meta,
-            closure=dict(self.current_scope)
+            closure=dict(self.current_scope),
+            attributes=self._eval_attributes(getattr(node, 'attributes', None)),
         )
 
         self.current_scope[node.name] = {
@@ -695,7 +790,11 @@ class Interpreter:
                     getattr(node, 'line', None), getattr(node, 'column', None), self.filename,
                 )
 
-        cls = Class(name=node.name, parent_class=parent_cls)
+        cls = Class(
+            name=node.name,
+            parent_class=parent_cls,
+            attributes=self._eval_attributes(getattr(node, 'attributes', None)),
+        )
 
         for member in node.members:
             if isinstance(member, ConstructorDeclaration):
@@ -733,7 +832,8 @@ class Interpreter:
                     is_meta=is_meta,
                     closure=dict(self.current_scope),
                     owner_class=cls,
-                    access_modifier=member.access_modifier
+                    access_modifier=member.access_modifier,
+                    attributes=self._eval_attributes(getattr(member, 'attributes', None)),
                 )
                 if member.is_static:
                     # Static members live in their own bucket so instances never
@@ -1172,6 +1272,11 @@ class Interpreter:
             return None
 
         if isinstance(obj, Class):
+            # Custom-attribute inspection API (metadata only -- never
+            # executes anything by itself). Checked before static members
+            # so it can't be shadowed by a same-named field/method.
+            if node.property in ('hasAttribute', 'getAttribute', 'getAttributes'):
+                return getattr(obj, node.property)
             # Access static members first, then (legacy) instance methods
             # accessed directly off the class object.
             if node.property in obj.static_members:

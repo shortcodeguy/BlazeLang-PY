@@ -41,6 +41,7 @@ class TokenType(Enum):
     FROM = auto()
     AS = auto()
     DEFAULT = auto()
+    DEFINE = auto()
     TRY = auto()
     CATCH = auto()
     FINALLY = auto()
@@ -93,6 +94,7 @@ class TokenType(Enum):
     COLON = auto()
     SEMICOLON = auto()
     ARROW = auto()
+    AT = auto()  # '@' -- custom attribute marker, e.g. @logged
     
     # Special
     EOF = auto()

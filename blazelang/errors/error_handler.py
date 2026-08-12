@@ -718,6 +718,96 @@ class StructInheritanceError(BlazeError):
         )
 
 
+# --- Custom Attribute Errors ---
+
+class InvalidAttributeSyntaxError(BlazeError):
+    """Raised for malformed '@name'/'@name(...)' or 'Define @name' syntax"""
+
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Invalid attribute syntax: {message}",
+            line,
+            column,
+            filename,
+            code="BLZ2041",
+            hint="Attributes look like '@logged' or '@role(\"admin\")', and must be declared first with 'Define @name' or 'Define @name(param)'.",
+        )
+
+
+class UndefinedAttributeError(BlazeError):
+    """Raised when '@name' is used but was never declared with 'Define @name'"""
+
+    def __init__(self, name: str, line: int = None, column: int = None, filename: str = None, known_names=None):
+        did_you_mean = find_similar_name(name, known_names)
+        super().__init__(
+            f"Attribute '@{name}' is not defined",
+            line,
+            column,
+            filename,
+            code="BLZ2042",
+            hint=build_hint(
+                f"Declare it first with 'Define @{name}' (add '(param, ...)' if it takes arguments) before using '@{name}'.",
+                did_you_mean=f"@{did_you_mean}" if did_you_mean else None,
+            ),
+        )
+
+
+class DuplicateAttributeDefinitionError(BlazeError):
+    """Raised when the same attribute name is declared with 'Define' more than once"""
+
+    def __init__(self, name: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Attribute '@{name}' is already defined",
+            line,
+            column,
+            filename,
+            code="BLZ2043",
+            hint=f"Remove the duplicate 'Define @{name}' declaration.",
+        )
+
+
+class DuplicateAttributeUsageError(BlazeError):
+    """Raised when the same attribute is attached to the same target more than once"""
+
+    def __init__(self, name: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Attribute '@{name}' is applied more than once to the same declaration",
+            line,
+            column,
+            filename,
+            code="BLZ2044",
+            hint=f"Remove the duplicate '@{name}' above this declaration.",
+        )
+
+
+class InvalidAttributeArgumentsError(BlazeError):
+    """Raised when an attribute usage's argument count doesn't match its 'Define'"""
+
+    def __init__(self, name: str, expected: int, got: int, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Attribute '@{name}' expects {expected} argument(s) but got {got}",
+            line,
+            column,
+            filename,
+            code="BLZ2045",
+            hint=f"Check 'Define @{name}(...)' for the expected parameter list, and match it exactly at the '@{name}(...)' usage.",
+        )
+
+
+class AttributeTargetError(BlazeError):
+    """Raised when '@name' is attached to something that cannot carry attributes"""
+
+    def __init__(self, target: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Attributes cannot be applied to {target}",
+            line,
+            column,
+            filename,
+            code="BLZ2046",
+            hint="Attributes can only be applied directly above a Function, Meta, or Class declaration.",
+        )
+
+
 class UnknownStructFieldError(RuntimeError):
     """Raised when Struct construction is given a named argument that isn't a declared field"""
 
@@ -1387,6 +1477,12 @@ class ErrorFormatter:
             "UnknownStructFieldError": "Check the spelling of the field name, or add it to the Struct.",
             "DuplicateStructArgumentError": "Provide the field either positionally or by name, not both.",
             "StructConstructionError": "Check the Struct's declared fields against the arguments passed to its constructor call.",
+            "InvalidAttributeSyntaxError": "Attributes look like '@logged' or '@role(\"admin\")', written directly above a Function, Meta, or Class.",
+            "UndefinedAttributeError": "Declare the attribute first with 'Define @name' before using '@name'.",
+            "DuplicateAttributeDefinitionError": "Remove the duplicate 'Define @name' declaration.",
+            "DuplicateAttributeUsageError": "Remove the duplicate '@name' above the declaration.",
+            "InvalidAttributeArgumentsError": "Match the argument count to the attribute's 'Define @name(...)' parameter list.",
+            "AttributeTargetError": "Attributes can only be applied directly above a Function, Meta, or Class declaration.",
             "AttributeError": "Check that the attribute exists on the target object and that its name is spelled correctly.",
             "ValueError": "Check that the value provided is valid for the operation.",
             "OverflowError": "Use smaller numeric values or split the calculation into smaller operations.",

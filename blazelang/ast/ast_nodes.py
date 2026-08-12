@@ -133,6 +133,11 @@ class FunctionDeclaration(ASTNode):
     is_static: bool = False
     access_modifier: str = 'public'
     is_meta: bool = False  # True for Meta, False for Function
+    # Custom attributes attached via '@name' / '@name(args)' immediately
+    # before this declaration (e.g. @logged, @role("admin")). Empty when
+    # none were written. Purely metadata -- attaching an attribute never
+    # executes anything on its own.
+    attributes: List['AttributeUsage'] = field(default_factory=list)
 
 
 @dataclass
@@ -154,6 +159,9 @@ class ClassDeclaration(ASTNode):
     name: str
     members: List[ASTNode]
     parent_class: Optional[str] = None
+    # Custom attributes attached via '@name' / '@name(args)' immediately
+    # before this declaration. See FunctionDeclaration.attributes.
+    attributes: List['AttributeUsage'] = field(default_factory=list)
 
 
 @dataclass
@@ -339,3 +347,35 @@ class NamedArgument(ASTNode):
     misusing them."""
     name: str
     value: Any = None
+
+
+# === Custom Attributes ===
+
+@dataclass
+class AttributeDefinition(ASTNode):
+    """`Define @name` or `Define @name(param, ...)`.
+
+    Declares an attribute name (and, optionally, its parameter list) so it
+    can later be attached to a Function/Meta/Class declaration with
+    `@name` / `@name(args)`. Declaring an attribute never executes
+    anything -- it only registers the name/arity for later use and for
+    Meta inspection.
+    """
+    name: str
+    parameters: List[str] = field(default_factory=list)
+    line: Optional[int] = None
+    column: Optional[int] = None
+    filename: Optional[str] = None
+
+
+@dataclass
+class AttributeUsage(ASTNode):
+    """A single `@name` or `@name(args)` attached to a Function, Meta, or
+    Class declaration. `arguments` holds unevaluated expression nodes --
+    they are evaluated once, when the declaration they decorate runs, just
+    like any other expression in that scope."""
+    name: str
+    arguments: List[Any] = field(default_factory=list)
+    line: Optional[int] = None
+    column: Optional[int] = None
+    filename: Optional[str] = None

@@ -1,0 +1,47 @@
+// BlazeLang Custom Attributes Example
+
+Define @logged
+Define @role(name)
+Define @service(name)
+
+@logged
+@role("admin")
+Function DeleteUser(id) {
+    Show("Deleting user: " + id)
+    return true
+}
+
+@logged
+Function Add(a, b) {
+    return a + b
+}
+
+@service("users")
+Class UserService {
+    Constructor(name) {
+        this.name = name
+    }
+
+    @logged
+    Function Create(username) {
+        return this.name + ": " + username
+    }
+
+    // Meta OnCall is an existing BlazeLang lifecycle hook -- it now gets a
+    // MethodName that also exposes hasAttribute()/getAttribute()/getAttributes(),
+    // so it can inspect the attributes attached to the method being called.
+    Meta OnCall(method, arguments) {
+        if method.hasAttribute("logged") {
+            Show("[log] calling " + method)
+        }
+    }
+}
+
+Show("========== ATTRIBUTES ==========")
+Show(Add(10, 20))
+Show(DeleteUser(42))
+var service = UserService("UserService")
+Show(service.Create("Rohit"))
+Show("UserService has @service: " + UserService.hasAttribute("service"))
+Show("UserService @service value: " + UserService.getAttribute("service"))
+Show("========== ATTRIBUTES COMPLETE ==========")

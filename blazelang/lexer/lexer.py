@@ -40,6 +40,7 @@ class Lexer:
             'from': TokenType.FROM,
             'as': TokenType.AS,
             'Default': TokenType.DEFAULT,
+            'Define': TokenType.DEFINE,
             'try': TokenType.TRY,
             'catch': TokenType.CATCH,
             'finally': TokenType.FINALLY,
@@ -278,6 +279,7 @@ class Lexer:
                 ',': TokenType.COMMA,
                 '.': TokenType.DOT,
                 ':': TokenType.COLON,
+                '@': TokenType.AT,
             }
             
             if self.current_char in single_char_map:
