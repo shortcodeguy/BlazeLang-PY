@@ -1,9 +1,10 @@
 // ============================================================
 // BlazeLang Math App Suite
-// Class + Meta + Functions + Math Module
+// Class + Meta + Functions + Math + Convert Module
 // ============================================================
 
 Import Math from "math"
+Import Convert from "convert"
 
 
 // ============================================================
@@ -11,6 +12,10 @@ Import Math from "math"
 // ============================================================
 
 Class Calculator {
+
+    // ========================================================
+    // CREATE
+    // ========================================================
 
     Meta Create(name) {
         Show("")
@@ -20,7 +25,12 @@ Class Calculator {
     }
 
 
+    // ========================================================
+    // MAIN MENU
+    // ========================================================
+
     Meta Menu() {
+
         Show("")
         Show("========== CALCULATOR ==========")
         Show("1. Basic Calculator")
@@ -33,402 +43,831 @@ Class Calculator {
         Show("8. Game Damage Calculator")
         Show("9. Physics Calculator")
         Show("10. Random Dice")
-        Show("0. Exit")
+        Show("11. Exit")
         Show("")
     }
 
+
+    // ========================================================
+    // BASIC CALCULATOR
+    // ========================================================
 
     Meta Basic() {
 
-        Show("")
-        Show("========== BASIC CALCULATOR ==========")
+        var running = true
 
-        var a = Input("Enter first number: ")
-        var op = Input("Enter operation (+ - * / % ^): ")
-        var b = Input("Enter second number: ")
+        while running {
 
-        if op == "+" {
-            Show("Result: " + (a + b))
-        }
+            Show("")
+            Show("========== BASIC CALCULATOR ==========")
+            Show("1. Calculate")
+            Show("0. Back")
+            Show("")
 
-        if op == "-" {
-            Show("Result: " + (a - b))
-        }
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-        if op == "*" {
-            Show("Result: " + (a * b))
-        }
+            if choice == 0 {
 
-        if op == "/" {
-            Show("Result: " + (a / b))
-        }
+                running = false
 
-        if op == "%" {
-            Show("Result: " + Math.Mod(a, b))
-        }
+            }
 
-        if op == "^" {
-            Show("Result: " + Math.Pow(a, b))
+            else if choice == 1 {
+
+                var a = Convert.ToFloat(
+                    Input("Enter first number: ")
+                )
+
+                var op = Input(
+                    "Enter operation (+ - * / % ^): "
+                )
+
+                var b = Convert.ToFloat(
+                    Input("Enter second number: ")
+                )
+
+                if op == "+" {
+                    Show("Result: " + (a + b))
+                }
+
+                else if op == "-" {
+                    Show("Result: " + (a - b))
+                }
+
+                else if op == "*" {
+                    Show("Result: " + (a * b))
+                }
+
+                else if op == "/" {
+                    Show("Result: " + (a / b))
+                }
+
+                else if op == "%" {
+                    Show("Result: " + Math.Mod(a, b))
+                }
+
+                else if op == "^" {
+                    Show("Result: " + Math.Pow(a, b))
+                }
+
+                else {
+                    Show("Invalid operator.")
+                }
+            }
+
+            else {
+                Show("Invalid choice. Please choose 1 or 0.")
+            }
         }
     }
 
+
+    // ========================================================
+    // SCIENTIFIC CALCULATOR
+    // ========================================================
 
     Meta Scientific() {
 
-        Show("")
-        Show("========== SCIENTIFIC CALCULATOR ==========")
+        var running = true
 
-        Show("1. Square Root")
-        Show("2. Power")
-        Show("3. Sin")
-        Show("4. Cos")
-        Show("5. Tan")
-        Show("6. Log10")
-        Show("7. Natural Log")
-        Show("8. Factorial")
+        while running {
 
-        var choice = Input("Choose operation: ")
+            Show("")
+            Show("========== SCIENTIFIC CALCULATOR ==========")
+            Show("1. Square Root")
+            Show("2. Power")
+            Show("3. Sin")
+            Show("4. Cos")
+            Show("5. Tan")
+            Show("6. Log10")
+            Show("7. Natural Log")
+            Show("8. Factorial")
+            Show("0. Back")
+            Show("")
 
-        if choice == 1 {
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-            var n = Input("Enter number: ")
+            if choice == 0 {
 
-            Show("Result:")
-            Show(Math.Sqrt(n))
-        }
+                running = false
+            }
 
-        if choice == 2 {
+            else if choice == 1 {
 
-            var n = Input("Enter base: ")
-            var p = Input("Enter power: ")
+                var n = Convert.ToFloat(
+                    Input("Enter number: ")
+                )
 
-            Show("Result:")
-            Show(Math.Pow(n, p))
-        }
+                Show("Result:")
+                Show(Math.Sqrt(n))
+            }
 
-        if choice == 3 {
+            else if choice == 2 {
 
-            var angle = Input("Enter angle in degrees: ")
+                var n = Convert.ToFloat(
+                    Input("Enter base: ")
+                )
 
-            Show("Result:")
-            Show(Math.SinDeg(angle))
-        }
+                var p = Convert.ToFloat(
+                    Input("Enter power: ")
+                )
 
-        if choice == 4 {
+                Show("Result:")
+                Show(Math.Pow(n, p))
+            }
 
-            var angle = Input("Enter angle in degrees: ")
+            else if choice == 3 {
 
-            Show("Result:")
-            Show(Math.CosDeg(angle))
-        }
+                var angle = Convert.ToFloat(
+                    Input("Enter angle in degrees: ")
+                )
 
-        if choice == 5 {
+                Show("Result:")
+                Show(Math.SinDeg(angle))
+            }
 
-            var angle = Input("Enter angle in degrees: ")
+            else if choice == 4 {
 
-            Show("Result:")
-            Show(Math.TanDeg(angle))
-        }
+                var angle = Convert.ToFloat(
+                    Input("Enter angle in degrees: ")
+                )
 
-        if choice == 6 {
+                Show("Result:")
+                Show(Math.CosDeg(angle))
+            }
 
-            var n = Input("Enter number: ")
+            else if choice == 5 {
 
-            Show("Result:")
-            Show(Math.Log10(n))
-        }
+                var angle = Convert.ToFloat(
+                    Input("Enter angle in degrees: ")
+                )
 
-        if choice == 7 {
+                Show("Result:")
+                Show(Math.TanDeg(angle))
+            }
 
-            var n = Input("Enter number: ")
+            else if choice == 6 {
 
-            Show("Result:")
-            Show(Math.Log(n))
-        }
+                var n = Convert.ToFloat(
+                    Input("Enter number: ")
+                )
 
-        if choice == 8 {
+                Show("Result:")
+                Show(Math.Log10(n))
+            }
 
-            var n = Input("Enter number: ")
+            else if choice == 7 {
 
-            Show("Result:")
-            Show(Math.Factorial(n))
+                var n = Convert.ToFloat(
+                    Input("Enter number: ")
+                )
+
+                Show("Result:")
+                Show(Math.Log(n))
+            }
+
+            else if choice == 8 {
+
+                var n = Convert.ToInt64(
+                    Input("Enter number: ")
+                )
+
+                Show("Result:")
+                Show(Math.Factorial(n))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1-8 or 0 to go back."
+                )
+            }
         }
     }
 
+
+    // ========================================================
+    // GEOMETRY CALCULATOR
+    // ========================================================
 
     Meta Geometry() {
 
-        Show("")
-        Show("========== GEOMETRY CALCULATOR ==========")
+        var running = true
 
-        Show("1. Circle Area")
-        Show("2. Circle Circumference")
-        Show("3. Rectangle Area")
-        Show("4. Triangle Area")
-        Show("5. 2D Distance")
-        Show("6. 3D Distance")
+        while running {
 
-        var choice = Input("Choose operation: ")
+            Show("")
+            Show("========== GEOMETRY CALCULATOR ==========")
+            Show("1. Circle Area")
+            Show("2. Circle Circumference")
+            Show("3. Rectangle Area")
+            Show("4. Triangle Area")
+            Show("5. 2D Distance")
+            Show("6. 3D Distance")
+            Show("0. Back")
+            Show("")
 
-        if choice == 1 {
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-            var r = Input("Enter radius: ")
+            if choice == 0 {
 
-            Show("Area:")
-            Show(Math.CircleArea(r))
-        }
+                running = false
+            }
 
-        if choice == 2 {
+            else if choice == 1 {
 
-            var r = Input("Enter radius: ")
+                var r = Convert.ToFloat(
+                    Input("Enter radius: ")
+                )
 
-            Show("Circumference:")
-            Show(Math.CircleCircumference(r))
-        }
+                Show("Area:")
+                Show(Math.CircleArea(r))
+            }
 
-        if choice == 3 {
+            else if choice == 2 {
 
-            var w = Input("Enter width: ")
-            var h = Input("Enter height: ")
+                var r = Convert.ToFloat(
+                    Input("Enter radius: ")
+                )
 
-            Show("Area:")
-            Show(Math.RectangleArea(w, h))
-        }
+                Show("Circumference:")
+                Show(Math.CircleCircumference(r))
+            }
 
-        if choice == 4 {
+            else if choice == 3 {
 
-            var b = Input("Enter base: ")
-            var h = Input("Enter height: ")
+                var w = Convert.ToFloat(
+                    Input("Enter width: ")
+                )
 
-            Show("Area:")
-            Show(Math.TriangleArea(b, h))
-        }
+                var h = Convert.ToFloat(
+                    Input("Enter height: ")
+                )
 
-        if choice == 5 {
+                Show("Area:")
+                Show(Math.RectangleArea(w, h))
+            }
 
-            var x1 = Input("X1: ")
-            var y1 = Input("Y1: ")
-            var x2 = Input("X2: ")
-            var y2 = Input("Y2: ")
+            else if choice == 4 {
 
-            Show("Distance:")
-            Show(Math.Distance2D(x1, y1, x2, y2))
-        }
+                var b = Convert.ToFloat(
+                    Input("Enter base: ")
+                )
 
-        if choice == 6 {
+                var h = Convert.ToFloat(
+                    Input("Enter height: ")
+                )
 
-            var x1 = Input("X1: ")
-            var y1 = Input("Y1: ")
-            var z1 = Input("Z1: ")
+                Show("Area:")
+                Show(Math.TriangleArea(b, h))
+            }
 
-            var x2 = Input("X2: ")
-            var y2 = Input("Y2: ")
-            var z2 = Input("Z2: ")
+            else if choice == 5 {
 
-            Show("Distance:")
-            Show(Math.Distance3D(
-                x1, y1, z1,
-                x2, y2, z2
-            ))
+                var x1 = Convert.ToFloat(
+                    Input("X1: ")
+                )
+
+                var y1 = Convert.ToFloat(
+                    Input("Y1: ")
+                )
+
+                var x2 = Convert.ToFloat(
+                    Input("X2: ")
+                )
+
+                var y2 = Convert.ToFloat(
+                    Input("Y2: ")
+                )
+
+                Show("Distance:")
+                Show(Math.Distance2D(
+                    x1,
+                    y1,
+                    x2,
+                    y2
+                ))
+            }
+
+            else if choice == 6 {
+
+                var x1 = Convert.ToFloat(
+                    Input("X1: ")
+                )
+
+                var y1 = Convert.ToFloat(
+                    Input("Y1: ")
+                )
+
+                var z1 = Convert.ToFloat(
+                    Input("Z1: ")
+                )
+
+                var x2 = Convert.ToFloat(
+                    Input("X2: ")
+                )
+
+                var y2 = Convert.ToFloat(
+                    Input("Y2: ")
+                )
+
+                var z2 = Convert.ToFloat(
+                    Input("Z2: ")
+                )
+
+                Show("Distance:")
+
+                Show(Math.Distance3D(
+                    x1,
+                    y1,
+                    z1,
+                    x2,
+                    y2,
+                    z2
+                ))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1-6 or 0 to go back."
+                )
+            }
         }
     }
 
+
+    // ========================================================
+    // STATISTICS
+    // ========================================================
 
     Meta Statistics() {
 
-        Show("")
-        Show("========== STATISTICS ==========")
+        var running = true
 
-        var a = Input("Number 1: ")
-        var b = Input("Number 2: ")
-        var c = Input("Number 3: ")
-        var d = Input("Number 4: ")
-        var e = Input("Number 5: ")
+        while running {
 
-        Show("Sum:")
-        Show(Math.Sum(a, b, c, d, e))
+            Show("")
+            Show("========== STATISTICS ==========")
+            Show("1. Calculate Statistics")
+            Show("0. Back")
+            Show("")
 
-        Show("Mean:")
-        Show(Math.Mean(a, b, c, d, e))
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-        Show("Median:")
-        Show(Math.Median(a, b, c, d, e))
+            if choice == 0 {
 
-        Show("Variance:")
-        Show(Math.Variance(a, b, c, d, e))
+                running = false
+            }
 
-        Show("Standard Deviation:")
-        Show(Math.StdDev(a, b, c, d, e))
+            else if choice == 1 {
 
-        Show("Range:")
-        Show(Math.Range(a, b, c, d, e))
+                var a = Convert.ToFloat(
+                    Input("Number 1: ")
+                )
+
+                var b = Convert.ToFloat(
+                    Input("Number 2: ")
+                )
+
+                var c = Convert.ToFloat(
+                    Input("Number 3: ")
+                )
+
+                var d = Convert.ToFloat(
+                    Input("Number 4: ")
+                )
+
+                var e = Convert.ToFloat(
+                    Input("Number 5: ")
+                )
+
+                Show("Sum:")
+                Show(Math.Sum(a, b, c, d, e))
+
+                Show("Mean:")
+                Show(Math.Mean(a, b, c, d, e))
+
+                Show("Median:")
+                Show(Math.Median(a, b, c, d, e))
+
+                Show("Variance:")
+                Show(Math.Variance(a, b, c, d, e))
+
+                Show("Standard Deviation:")
+                Show(Math.StdDev(a, b, c, d, e))
+
+                Show("Range:")
+                Show(Math.Range(a, b, c, d, e))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
+        }
     }
 
+
+    // ========================================================
+    // NUMBER THEORY
+    // ========================================================
 
     Meta NumberTheory() {
 
-        Show("")
-        Show("========== NUMBER THEORY ==========")
+        var running = true
 
-        var n = Input("Enter number: ")
+        while running {
 
-        Show("Is Prime:")
-        Show(Math.IsPrimeFast(n))
+            Show("")
+            Show("========== NUMBER THEORY ==========")
+            Show("1. Analyze Number")
+            Show("0. Back")
+            Show("")
 
-        Show("Factors:")
-        Show(Math.Factors(n))
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-        Show("Next Prime:")
-        Show(Math.NextPrime(n))
+            if choice == 0 {
 
-        Show("Is Even:")
-        Show(Math.IsEven(n))
+                running = false
+            }
 
-        Show("Is Odd:")
-        Show(Math.IsOdd(n))
+            else if choice == 1 {
 
-        Show("Factorial:")
-        Show(Math.Factorial(n))
+                var n = Convert.ToInt64(
+                    Input("Enter number: ")
+                )
 
-        Show("Fibonacci:")
-        Show(Math.FastFibonacci(n))
+                Show("Is Prime:")
+                Show(Math.IsPrimeFast(n))
+
+                Show("Factors:")
+                Show(Math.Factors(n))
+
+                Show("Next Prime:")
+                Show(Math.NextPrime(n))
+
+                Show("Is Even:")
+                Show(Math.IsEven(n))
+
+                Show("Is Odd:")
+                Show(Math.IsOdd(n))
+
+                Show("Factorial:")
+                Show(Math.Factorial(n))
+
+                Show("Fibonacci:")
+                Show(Math.FastFibonacci(n))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
+        }
     }
 
+
+    // ========================================================
+    // VECTOR CALCULATOR
+    // ========================================================
 
     Meta Vector() {
 
-        Show("")
-        Show("========== VECTOR CALCULATOR ==========")
+        var running = true
 
-        var x1 = Input("Vector 1 X: ")
-        var y1 = Input("Vector 1 Y: ")
+        while running {
 
-        var x2 = Input("Vector 2 X: ")
-        var y2 = Input("Vector 2 Y: ")
+            Show("")
+            Show("========== VECTOR CALCULATOR ==========")
+            Show("1. Calculate Vectors")
+            Show("0. Back")
+            Show("")
 
-        var v1 = [x1, y1]
-        var v2 = [x2, y2]
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-        Show("Vector Addition:")
-        Show(Math.VectorAdd(v1, v2))
+            if choice == 0 {
 
-        Show("Vector Subtraction:")
-        Show(Math.VectorSubtract(v1, v2))
+                running = false
+            }
 
-        Show("Vector 1 Length:")
-        Show(Math.VectorLength(v1))
+            else if choice == 1 {
 
-        Show("Vector 2 Length:")
-        Show(Math.VectorLength(v2))
+                var x1 = Convert.ToFloat(
+                    Input("Vector 1 X: ")
+                )
 
-        Show("Distance:")
-        Show(Math.VectorDistance(v1, v2))
+                var y1 = Convert.ToFloat(
+                    Input("Vector 1 Y: ")
+                )
 
-        Show("Dot Product:")
-        Show(Math.Dot(v1, v2))
+                var x2 = Convert.ToFloat(
+                    Input("Vector 2 X: ")
+                )
+
+                var y2 = Convert.ToFloat(
+                    Input("Vector 2 Y: ")
+                )
+
+                var v1 = [x1, y1]
+                var v2 = [x2, y2]
+
+                Show("Vector Addition:")
+                Show(Math.VectorAdd(v1, v2))
+
+                Show("Vector Subtraction:")
+                Show(Math.VectorSubtract(v1, v2))
+
+                Show("Vector 1 Length:")
+                Show(Math.VectorLength(v1))
+
+                Show("Vector 2 Length:")
+                Show(Math.VectorLength(v2))
+
+                Show("Distance:")
+                Show(Math.VectorDistance(v1, v2))
+
+                Show("Dot Product:")
+                Show(Math.Dot(v1, v2))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
+        }
     }
 
+
+    // ========================================================
+    // MATRIX CALCULATOR
+    // ========================================================
 
     Meta Matrix() {
 
-        Show("")
-        Show("========== MATRIX CALCULATOR ==========")
+        var running = true
 
-        var a = [
-            [1, 2],
-            [3, 4]
-        ]
+        while running {
 
-        var b = [
-            [5, 6],
-            [7, 8]
-        ]
+            Show("")
+            Show("========== MATRIX CALCULATOR ==========")
+            Show("1. Calculate Matrix")
+            Show("0. Back")
+            Show("")
 
-        Show("Matrix A:")
-        Show(a)
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
-        Show("Matrix B:")
-        Show(b)
+            if choice == 0 {
 
-        Show("A + B:")
-        Show(Math.MatrixAdd(a, b))
+                running = false
+            }
 
-        Show("A - B:")
-        Show(Math.MatrixSubtract(a, b))
+            else if choice == 1 {
 
-        Show("A * B:")
-        Show(Math.MatrixMultiply(a, b))
+                var a = [
+                    [1, 2],
+                    [3, 4]
+                ]
 
-        Show("Transpose:")
-        Show(Math.MatrixTranspose(a))
+                var b = [
+                    [5, 6],
+                    [7, 8]
+                ]
 
-        Show("Determinant:")
-        Show(Math.MatrixDeterminant(a))
+                Show("Matrix A:")
+                Show(a)
 
-        Show("Trace:")
-        Show(Math.MatrixTrace(a))
+                Show("Matrix B:")
+                Show(b)
+
+                Show("A + B:")
+                Show(Math.MatrixAdd(a, b))
+
+                Show("A - B:")
+                Show(Math.MatrixSubtract(a, b))
+
+                Show("A * B:")
+                Show(Math.MatrixMultiply(a, b))
+
+                Show("Transpose:")
+                Show(Math.MatrixTranspose(a))
+
+                Show("Determinant:")
+                Show(Math.MatrixDeterminant(a))
+
+                Show("Trace:")
+                Show(Math.MatrixTrace(a))
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
+        }
     }
 
+
+    // ========================================================
+    // GAME DAMAGE CALCULATOR
+    // ========================================================
 
     Meta Damage() {
 
-        Show("")
-        Show("========== GAME DAMAGE CALCULATOR ==========")
+        var running = true
 
-        var damage = Input("Base damage: ")
-        var multiplier = Input("Multiplier: ")
-        var critical = Input("Critical hit? 1/0: ")
+        while running {
 
-        var finalDamage = damage * multiplier
+            Show("")
+            Show("========== GAME DAMAGE CALCULATOR ==========")
+            Show("1. Calculate Damage")
+            Show("0. Back")
+            Show("")
 
-        if critical == 1 {
-            finalDamage = finalDamage * 2
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
+
+            if choice == 0 {
+
+                running = false
+            }
+
+            else if choice == 1 {
+
+                var damage = Convert.ToFloat(
+                    Input("Base damage: ")
+                )
+
+                var multiplier = Convert.ToFloat(
+                    Input("Multiplier: ")
+                )
+
+                var critical = Convert.ToInt32(
+                    Input("Critical hit? 1/0: ")
+                )
+
+                var finalDamage = damage * multiplier
+
+                if critical == 1 {
+                    finalDamage = finalDamage * 2
+                }
+
+                finalDamage = Math.Clamp(
+                    finalDamage,
+                    0,
+                    999999
+                )
+
+                Show("Final Damage:")
+                Show(finalDamage)
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
         }
-
-        finalDamage = Math.Clamp(
-            finalDamage,
-            0,
-            999999
-        )
-
-        Show("Final Damage:")
-        Show(finalDamage)
     }
 
+
+    // ========================================================
+    // PHYSICS CALCULATOR
+    // ========================================================
 
     Meta Physics() {
 
-        Show("")
-        Show("========== PHYSICS CALCULATOR ==========")
+        var running = true
 
-        var velocity = Input("Velocity: ")
-        var time = Input("Time: ")
-        var acceleration = Input("Acceleration: ")
+        while running {
 
-        var distance = velocity * time + 0.5 * acceleration * Math.Pow(time, 2)
+            Show("")
+            Show("========== PHYSICS CALCULATOR ==========")
+            Show("1. Distance Calculator")
+            Show("0. Back")
+            Show("")
 
-        Show("Distance:")
-        Show(distance)
-    }
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
 
+            if choice == 0 {
 
-    Meta Dice() {
+                running = false
+            }
 
-        Show("")
-        Show("========== DICE ROLLER ==========")
+            else if choice == 1 {
 
-        var sides = Input("Number of sides: ")
+                var velocity = Convert.ToFloat(
+                    Input("Velocity: ")
+                )
 
-        var result = Math.RandomInt(1, sides)
+                var time = Convert.ToFloat(
+                    Input("Time: ")
+                )
 
-        Show("You rolled:")
-        Show(result)
+                var acceleration = Convert.ToFloat(
+                    Input("Acceleration: ")
+                )
 
-        if result == sides {
-            Show("MAX ROLL!")
+                var distance =
+                    velocity * time +
+                    0.5 * acceleration * Math.Pow(time, 2)
+
+                Show("Distance:")
+                Show(distance)
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
         }
     }
 
+
+    // ========================================================
+    // DICE
+    // ========================================================
+
+    Meta Dice() {
+
+        var running = true
+
+        while running {
+
+            Show("")
+            Show("========== DICE ROLLER ==========")
+            Show("1. Roll Dice")
+            Show("0. Back")
+            Show("")
+
+            var choice = Convert.ToInt32(
+                Input("Choose operation: ")
+            )
+
+            if choice == 0 {
+
+                running = false
+            }
+
+            else if choice == 1 {
+
+                var sides = Convert.ToInt32(
+                    Input("Number of sides: ")
+                )
+
+                var result = Math.RandomInt(
+                    1,
+                    sides
+                )
+
+                Show("You rolled:")
+                Show(result)
+
+                if result == sides {
+                    Show("MAX ROLL!")
+                }
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1 or 0."
+                )
+            }
+        }
+    }
+
+
+    // ========================================================
+    // RUN APPLICATION
+    // ========================================================
 
     Meta Run() {
 
@@ -438,53 +877,73 @@ Class Calculator {
 
             Calculator.Menu()
 
-            var choice = Input("Select an app: ")
+            var choice = Convert.ToInt32(
+                Input("Select an app: ")
+            )
 
             if choice == 1 {
+
                 Calculator.Basic()
             }
 
-            if choice == 2 {
+            else if choice == 2 {
+
                 Calculator.Scientific()
             }
 
-            if choice == 3 {
+            else if choice == 3 {
+
                 Calculator.Geometry()
             }
 
-            if choice == 4 {
+            else if choice == 4 {
+
                 Calculator.Statistics()
             }
 
-            if choice == 5 {
+            else if choice == 5 {
+
                 Calculator.NumberTheory()
             }
 
-            if choice == 6 {
+            else if choice == 6 {
+
                 Calculator.Vector()
             }
 
-            if choice == 7 {
+            else if choice == 7 {
+
                 Calculator.Matrix()
             }
 
-            if choice == 8 {
+            else if choice == 8 {
+
                 Calculator.Damage()
             }
 
-            if choice == 9 {
+            else if choice == 9 {
+
                 Calculator.Physics()
             }
 
-            if choice == 10 {
+            else if choice == 10 {
+
                 Calculator.Dice()
             }
 
-            if choice == 0 {
+            else if choice == 11 {
 
                 Show("")
                 Show("Goodbye!")
+
                 running = false
+            }
+
+            else {
+
+                Show(
+                    "Invalid choice. Please choose 1-11."
+                )
             }
         }
     }
@@ -495,6 +954,8 @@ Class Calculator {
 // START APPLICATION
 // ============================================================
 
-Calculator.Create("BlazeLang Math Application Suite")
+Calculator.Create(
+    "BlazeLang Math Application Suite"
+)
 
 Calculator.Run()

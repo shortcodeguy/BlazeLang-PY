@@ -1,0 +1,115 @@
+// ============================================================
+// BlazeLang Convert Module Showcase
+// Int32 + Int64 + Float + String
+// ============================================================
+
+Import Convert from "convert"
+
+Show("========== CONVERT MODULE ==========")
+
+// ============================================================
+// INT32
+// ============================================================
+
+var age = Convert.ToInt32("13")
+Show("Int32: " + age)
+
+var negative = Convert.ToInt32("-42")
+Show("Negative Int32: " + negative)
+
+
+// ============================================================
+// INT64
+// ============================================================
+
+var bigNumber = Convert.ToInt64("9223372036854775807")
+Show("Int64: " + bigNumber)
+
+var negativeBig = Convert.ToInt64("-9223372036854775808")
+Show("Negative Int64: " + negativeBig)
+
+
+// ============================================================
+// INPUT -> INT32
+// ============================================================
+
+var number32 = Convert.ToInt32(
+    Input("Enter Int32: ")
+)
+
+Show("You entered Int32: " + number32)
+
+
+// ============================================================
+// INPUT -> INT64
+// ============================================================
+
+var number64 = Convert.ToInt64(
+    Input("Enter Int64: ")
+)
+
+Show("You entered Int64: " + number64)
+
+
+// ============================================================
+// FLOAT
+// ============================================================
+
+var price = Convert.ToFloat("99.50")
+Show("Float: " + price)
+
+var negativeFloat = Convert.ToFloat("-12.75")
+Show("Negative Float: " + negativeFloat)
+
+var decimalNumber = Convert.ToFloat(
+    Input("Enter Float: ")
+)
+
+Show("You entered Float: " + decimalNumber)
+
+
+// ============================================================
+// NUMBER -> STRING
+// ============================================================
+
+var score = 100
+var scoreText = Convert.ToString(score)
+
+Show("String score: " + scoreText)
+
+var pi = 3.14159
+var piText = Convert.ToString(pi)
+
+Show("String pi: " + piText)
+
+
+// ============================================================
+// BOOLEAN CONVERSION
+// ============================================================
+
+Show("True -> Int32: " + Convert.ToInt32(true))
+Show("False -> Int32: " + Convert.ToInt32(false))
+
+Show("True -> Float: " + Convert.ToFloat(true))
+Show("False -> Float: " + Convert.ToFloat(false))
+
+
+// ============================================================
+// ROUND TRIP
+// ============================================================
+
+var original = "123.45"
+
+var converted = Convert.ToFloat(original)
+var backToString = Convert.ToString(converted)
+
+Show("Original: " + original)
+Show("Converted: " + converted)
+Show("Back to String: " + backToString)
+
+
+// ============================================================
+// COMPLETE
+// ============================================================
+
+Show("========== CONVERT COMPLETE ==========")
