@@ -985,13 +985,30 @@ class Parser:
         return left
     
     def parse_multiplication(self):
-        """Parse multiplication, division, modulo, and power"""
-        left = self.parse_unary()
+        """Parse multiplication, division, and modulo"""
+        left = self.parse_power()
         
-        while self.match(TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.MODULO, TokenType.POWER):
+        while self.match(TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.MODULO):
             operator_token = self.current_token
             self.advance()
-            right = self.parse_unary()
+            right = self.parse_power()
+            left = self._tag(BinaryOperation(
+                left=left,
+                operator=operator_token.value,
+                right=right
+            ), operator_token)
+        
+        return left
+    
+    def parse_power(self):
+        """Parse exponentiation (^ or **). Higher precedence than * / %,
+        and right-associative, so 2 ^ 3 ^ 2 == 2 ^ (3 ^ 2)."""
+        left = self.parse_unary()
+        
+        if self.match(TokenType.POWER):
+            operator_token = self.current_token
+            self.advance()
+            right = self.parse_power()  # right-recursion => right-associative
             left = self._tag(BinaryOperation(
                 left=left,
                 operator=operator_token.value,

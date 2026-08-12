@@ -1125,6 +1125,7 @@ class Interpreter:
             '/': lambda a, b: a / b if b != 0 else (_ for _ in ()).throw(BlazeZeroDivisionError()),
             '%': lambda a, b: a % b if b != 0 else (_ for _ in ()).throw(BlazeZeroDivisionError()),
             '**': lambda a, b: a ** b,
+            '^': lambda a, b: a ** b,
             '==': lambda a, b: a == b,
             '!=': lambda a, b: a != b,
             '>': lambda a, b: a > b,
@@ -1148,7 +1149,7 @@ class Interpreter:
 
         if node.operator == '-':
             return -operand
-        elif node.operator == 'not':
+        elif node.operator in ('not', '!'):
             return not self.is_truthy(operand)
 
         raise BlazeRuntimeError(f"Unknown unary operator '{node.operator}'")

@@ -1,4 +1,148 @@
+// ============================================================
 // BlazeLang Operators Example
+// ============================================================
+
+
+// ============================================================
+// ARITHMETIC OPERATORS
+// ============================================================
+
+Show("========== ARITHMETIC OPERATORS ==========")
+
+var a = 10
+var b = 3
+
+Show("a + b = " + (a + b))
+Show("a - b = " + (a - b))
+Show("a * b = " + (a * b))
+Show("a / b = " + (a / b))
+Show("a % b = " + (a % b))
+Show("a ^ b = " + (a ^ b))
+
+
+// ============================================================
+// COMPARISON OPERATORS
+// ============================================================
+
+Show("========== COMPARISON OPERATORS ==========")
+
 var score = 8
-Show(score + 2)
-Show(score >= 5 and score < 10)
+
+Show("score == 8: " + (score == 8))
+Show("score != 5: " + (score != 5))
+Show("score > 5: " + (score > 5))
+Show("score < 10: " + (score < 10))
+Show("score >= 8: " + (score >= 8))
+Show("score <= 8: " + (score <= 8))
+
+
+// ============================================================
+// LOGICAL OPERATORS
+// ============================================================
+
+Show("========== LOGICAL OPERATORS ==========")
+
+var passed = true
+var active = false
+
+Show("passed and active: " + (passed and active))
+Show("passed or active: " + (passed or active))
+
+Show("passed && active: " + (passed && active))
+Show("passed && passed: " + (passed && passed))
+
+Show("not active: " + (!active))
+Show("not passed: " + (!passed))
+
+
+// ============================================================
+// COMBINED LOGICAL OPERATORS
+// ============================================================
+
+Show("========== COMBINED OPERATORS ==========")
+
+Show("score >= 5 and score < 10: " + (score >= 5 and score < 10))
+Show("score >= 5 && score < 10: " + (score >= 5 && score < 10))
+
+Show("score == 8 or score == 10: " + (score == 8 or score == 10))
+Show("score == 8 && score != 10: " + (score == 8 && score != 10))
+
+
+// ============================================================
+// ASSIGNMENT OPERATORS
+// ============================================================
+
+Show("========== ASSIGNMENT OPERATORS ==========")
+
+var value = 10
+
+value += 5
+Show("value += 5: " + value)
+
+value -= 2
+Show("value -= 2: " + value)
+
+value *= 3
+Show("value *= 3: " + value)
+
+value /= 2
+Show("value /= 2: " + value)
+
+value %= 5
+Show("value %= 5: " + value)
+
+
+// ============================================================
+// POWER + PRECEDENCE
+// ============================================================
+
+Show("========== POWER & PRECEDENCE ==========")
+
+Show("2 ^ 3 = " + (2 ^ 3))
+Show("2 ^ 3 * 2 = " + (2 ^ 3 * 2))
+Show("2 + 3 ^ 2 = " + (2 + 3 ^ 2))
+Show("(2 + 3) ^ 2 = " + ((2 + 3) ^ 2))
+
+Show("10 + 5 * 2 = " + (10 + 5 * 2))
+Show("(10 + 5) * 2 = " + ((10 + 5) * 2))
+
+
+// ============================================================
+// UNARY NOT
+// ============================================================
+
+Show("========== UNARY OPERATORS ==========")
+
+var enabled = true
+var disabled = false
+
+Show("!true = " + (!true))
+Show("!false = " + (!false))
+Show("!enabled = " + (!enabled))
+Show("!disabled = " + (!disabled))
+
+
+// ============================================================
+// OPERATOR COMBINATIONS
+// ============================================================
+
+Show("========== OPERATOR COMBINATIONS ==========")
+
+var x = 5
+var y = 2
+
+Show("x ^ y + 10 = " + (x ^ y + 10))
+Show("x * y + 3 = " + (x * y + 3))
+Show("x >= 5 && y < 5: " + (x >= 5 && y < 5))
+Show("x == 5 and y == 2: " + (x == 5 and y == 2))
+Show("!(x == 10): " + (!(x == 10)))
+
+// IMPORTANT: != must continue working alongside !
+Show("x != 10: " + (x != 10))
+
+
+// ============================================================
+// COMPLETE
+// ============================================================
+
+Show("========== OPERATORS COMPLETE ==========")

@@ -280,6 +280,7 @@ class Lexer:
                 '.': TokenType.DOT,
                 ':': TokenType.COLON,
                 '@': TokenType.AT,
+                '^': TokenType.POWER,
             }
             
             if self.current_char in single_char_map:
