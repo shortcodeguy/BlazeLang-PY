@@ -1,0 +1,164 @@
+// ============================================================
+// fixes.blz - Runtime audit verification
+// Exercises every bug fixed in the audit. Run with:
+//   python main.py run blazelang/examples/bugsfixes/fixes.blz
+// ============================================================
+
+Import Json from "json"
+
+// ------------------------------------------------------------
+// Bug 1 - Float literals correctly typed
+// ------------------------------------------------------------
+Show("--- Bug 1: numeric typing ---")
+Show(type(1))      // Integer
+Show(type(1.0))    // Float
+Show(type(2.5))    // Float
+
+var a = 1.0
+var b = 2.5
+Show(a + b)         // 3.5
+Show(a - b)         // -1.5
+Show(a * b)         // 2.5
+Show(a / b)         // 0.4
+Show(a == b)        // false
+
+// ------------------------------------------------------------
+// Bug 2 - Arithmetic expressions evaluated inside interpolation
+// ------------------------------------------------------------
+Show("--- Bug 2: interpolation arithmetic ---")
+Show("1.25 + 2.75 = {1.25 + 2.75}")   // 1.25 + 2.75 = 4.0
+Show("5.0 / 2 = {5.0 / 2}")            // 5.0 / 2 = 2.5
+Show("1 == 1.0 = {1 == 1.0}")          // 1 == 1.0 = true
+Show("2.5 == 2.5 = {2.5 == 2.5}")      // 2.5 == 2.5 = true
+
+// ------------------------------------------------------------
+// Bug 3 - Class methods are invoked, not returned as objects
+// ------------------------------------------------------------
+Show("--- Bug 3: method invocation ---")
+
+Class User {
+    private var secret = "hunter2"
+
+    Constructor(value) {
+        this.name = value
+    }
+
+    Function GetName() {
+        return this.name
+    }
+
+    Function GetSecret() {
+        return this.secret
+    }
+}
+
+var userObject = User("Rohit")
+Show(userObject.GetName())              // Rohit
+Show(userObject.GetSecret())            // hunter2
+Show("name = {userObject.GetName()}")   // name = Rohit
+
+Class Inventory {
+    Constructor() {
+        this.items = ["Sword", "Bow"]
+    }
+    Function GetFirst() {
+        return this.items[0]
+    }
+}
+var inventory = Inventory()
+Show(inventory.GetFirst())              // Sword
+
+// ------------------------------------------------------------
+// Bug 4 - Struct property access evaluated in expressions/interpolation
+// ------------------------------------------------------------
+Show("--- Bug 4: struct property access ---")
+
+Struct Point {
+    x
+    y
+}
+
+var point = Point(10, 20)
+Show(point.x)                                   // 10
+Show(point.y)                                   // 20
+Show("point.x = {point.x}")                     // point.x = 10
+point.x = 50
+Show("updated point.x = {point.x}")             // updated point.x = 50
+
+// ------------------------------------------------------------
+// Bug 5 - Static class members evaluated correctly
+// ------------------------------------------------------------
+Show("--- Bug 5: static members ---")
+
+Class Counter {
+    static var value = 10
+
+    static Function GetValue() {
+        return Counter.value
+    }
+}
+
+Show(Counter.value)                             // 10
+Show(Counter.GetValue())                        // 10
+Show("static value = {Counter.value}")          // static value = 10
+Show("static function = {Counter.GetValue()}")  // static function = 10
+
+// ------------------------------------------------------------
+// Bugs 6-8 - Index errors are proper BlazeLang errors
+// ------------------------------------------------------------
+Show("--- Bugs 6-8: index handling ---")
+
+var items = [1, 2, 3, 4, 5]
+Show(items[-1])   // 5 (negative indexing supported, counts from the end)
+
+try {
+    Show(items["abc"])
+} catch (err) {
+    Show("Caught: {err}")   // BlazeLang TypeError, not a raw Python ValueError
+}
+
+try {
+    Show(items[10])
+} catch (err) {
+    Show("Caught: {err}")   // BlazeLang IndexError, consistent for read...
+}
+
+try {
+    items[10] = "x"
+} catch (err) {
+    Show("Caught: {err}")   // ...and for assignment
+}
+
+// ------------------------------------------------------------
+// Bugs 9-12 - JSON module
+// ------------------------------------------------------------
+Show("--- Bugs 9-12: JSON ---")
+
+var project = {
+    name: "BlazeLang",
+    ready: true,
+    tags: ["language", "json"]
+}
+
+var text = Json.Stringify(project)
+Show(text)
+Show(Json.Parse(text).name)
+Show(Json.Pretty(project))
+Show(Json.Validate(text))          // true
+Show(Json.Validate("{broken}"))    // false
+
+Show(Json.Parse("3.14"))           // 3.14
+Show(Json.Parse("true"))           // true
+Show(Json.Parse("null"))           // null
+
+try {
+    Json.Parse(123)
+} catch (err) {
+    Show("Caught: {err}")          // Json.Parse now requires text
+}
+
+// Struct serialization still works
+var text2 = Json.Stringify(point)
+Show(text2)
+
+Show("--- All checks completed ---")

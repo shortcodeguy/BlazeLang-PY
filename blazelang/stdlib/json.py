@@ -49,8 +49,14 @@ def _normalise(value: Any) -> Any:
     if isinstance(value, str):
         return value
 
-    # Convert sequences (list, tuple, set) to JSON arrays
-    if isinstance(value, (list, tuple, set)):
+    # Convert sequences (list, tuple) to JSON arrays. `set` is deliberately
+    # NOT included here: BlazeLang has no Set type of its own (only List),
+    # so a Python `set` never legitimately reaches this function from
+    # BlazeLang code, and sets are unordered -- serializing one would give
+    # non-deterministic JSON output. If a future BlazeLang Set type is
+    # added, give it its own explicit, ordered handling here rather than
+    # piggy-backing on Python's set.
+    if isinstance(value, (list, tuple)):
         return [_normalise(item) for item in value]
 
     # Convert dicts (including custom subclasses) to JSON objects
@@ -71,16 +77,15 @@ class JsonLibrary:
     """JSON operations for BlazeLang."""
 
     def parse(self, text: Any) -> Any:
-        """Parse a JSON string or bytes into BlazeLang values.
+        """Parse JSON text (str/bytes/bytearray) into BlazeLang values.
 
-        If text is already a parsed JSON value (dict, list, etc.), it is
-        returned as‑is. Otherwise, it must be str or bytes.
+        Json.Parse is a text-parsing API: it must actually parse JSON
+        source, not hand back an already-runtime value unchanged. Passing
+        a non-string value (e.g. `Json.Parse(123)`) is a usage error, not
+        something to silently accept -- it previously returned the input
+        as-is, which masked bugs where a value was never stringified in the
+        first place.
         """
-        # Already a JSON‑compatible value
-        if isinstance(text, (dict, list, int, float, bool)) or text is None:
-            return text
-
-        # Accept both str and bytes (and bytearray)
         if isinstance(text, (str, bytes, bytearray)):
             try:
                 return json.loads(text)
@@ -125,10 +130,17 @@ class JsonLibrary:
             raise JSONError(f"Cannot format JSON: {error}")
 
     def validate(self, text: Any) -> bool:
-        """Check whether text is valid JSON or a JSON‑compatible value."""
-        if not isinstance(text, str):
-            # Non‑string values are valid if they are JSON‑compatible types
-            return isinstance(text, (dict, list, int, float, bool)) or text is None
+        """Check whether `text` is valid JSON text.
+
+        Json.Validate is a text-validation API, matching Json.Parse: it
+        answers "is this a well-formed JSON document", not "is this a
+        JSON-representable runtime value". A non-string input (e.g.
+        `Json.Validate(123)`) isn't JSON text at all, so it is simply not
+        valid JSON text -- this returns False rather than raising, keeping
+        Validate's contract of "always returns a bool, never throws".
+        """
+        if not isinstance(text, (str, bytes, bytearray)):
+            return False
         try:
             json.loads(text)
             return True

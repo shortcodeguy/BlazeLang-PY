@@ -1041,6 +1041,36 @@ class Interpreter:
 
         return value
 
+    def _resolve_index(self, index: Any, size: int) -> int:
+        """
+        Convert an interpolated/evaluated index value into a valid Python
+        list/string index, raising proper BlazeLang errors instead of
+        letting raw Python ValueError/TypeError leak to the user (Bug 6).
+
+        Negative indices are supported and count from the end (`items[-1]`
+        is the last element) -- this matches the behavior already observed
+        for plain list indexing before this fix (Python's native negative
+        indexing was reachable for `int`-typed indices), so it is made
+        explicit and applied consistently for both read and assignment,
+        for both lists and strings (Bug 8). Out-of-range indices (positive
+        or negative) raise the same BlazeIndexError used elsewhere, with a
+        consistent message for both read and assignment (Bug 7).
+        """
+        if isinstance(index, bool) or not isinstance(index, (int, float)):
+            raise BlazeTypeError(
+                f"List index must be an integer, got {type(index).__name__}"
+            )
+        if isinstance(index, float) and not index.is_integer():
+            raise BlazeTypeError(
+                f"List index must be an integer, got Float ({index})"
+            )
+        idx = int(index)
+        if idx < 0:
+            idx += size
+        if idx < 0 or idx >= size:
+            raise BlazeIndexError(int(index), size)
+        return idx
+
     def visit_ArrayElementAssignment(self, node) -> Any:
         """Handle array element assignment like arr[0] = value"""
         array = self.visit(node.array)
@@ -1048,7 +1078,7 @@ class Interpreter:
         value = self.visit(node.value)
 
         if isinstance(array, list):
-            idx = int(index)
+            idx = self._resolve_index(index, len(array))
             if node.operator == '=':
                 array[idx] = value
             elif node.operator == '+=':
@@ -1310,11 +1340,8 @@ class Interpreter:
         index = self.visit(node.index)
 
         if isinstance(array, (list, str)):
-            idx = int(index)
-            try:
-                return array[idx]
-            except IndexError:
-                raise BlazeIndexError(idx, len(array))
+            idx = self._resolve_index(index, len(array))
+            return array[idx]
 
         if isinstance(array, dict):
             return array.get(index)
@@ -1522,8 +1549,24 @@ class Interpreter:
                             result.append(str(value))
                         else:
                             result.append(self._format_value(value))
-                    except Exception as e:
-                        # If evaluation fails, keep the original expression
+                    except BlazeError:
+                        # A genuine BlazeLang runtime error raised while
+                        # evaluating an interpolated expression (undefined
+                        # variable, type error, an error propagating out of
+                        # a called function -- including one defined in an
+                        # imported module) must be allowed to propagate with
+                        # its real file/line/column intact, exactly like any
+                        # other runtime error. Silently swallowing it here
+                        # (the previous behavior) hid the error completely:
+                        # Show("{BrokenFunction()}") would just print the
+                        # literal text "{BrokenFunction()}" instead of
+                        # surfacing the failure, so callers never saw a
+                        # location -- or any diagnostic at all.
+                        raise
+                    except Exception:
+                        # Genuinely not an evaluable expression (e.g. plain
+                        # text that happens to be wrapped in braces) -- fall
+                        # back to the original text rather than crashing.
                         result.append(f'{{{expr}}}')
 
                     i = j
@@ -1540,9 +1583,15 @@ class Interpreter:
             return 'null'
         if isinstance(value, bool):
             return str(value).lower()
-        if isinstance(value, float) and math.isfinite(value) and value == int(value):
-            return str(int(value))
-        if isinstance(value, (int, float)):
+        # Integer and Float are now distinct Python types all the way from
+        # the lexer/parser through arithmetic (see builtin_type / Bug 1), so
+        # display must respect that distinction too: a Float that happens to
+        # have a whole-number value (e.g. `1.25 + 2.75` -> 4.0) must still
+        # print as "4.0", not silently collapse to "4" and look like an
+        # Integer. Only a genuine Python int prints without a decimal point.
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
             return str(value)
         if isinstance(value, str):
             return value
@@ -1560,447 +1609,59 @@ class Interpreter:
 
     def _evaluate_embedded_expression(self, expr: str) -> Any:
         """
-        Evaluate an expression embedded in string interpolation
-        Handles chained expressions like student.subjects[0], a % b
+        Evaluate an expression embedded in a string interpolation `{...}`
+        span by reusing the real BlazeLang Lexer and Parser, then running
+        the resulting AST through the normal `self.visit` path -- exactly
+        as if the expression had been written outside a string.
+
+        Previously this duplicated a large part of the expression grammar
+        by hand with regexes (arithmetic, comparisons, chained property /
+        array access, function calls, ...). That duplicate grammar was
+        incomplete and buggy in ways the real parser is not -- for example
+        it treated the '.' in a float literal like `1.25` as the start of
+        property access and routed the whole expression into the
+        chained-access handler instead of arithmetic, so
+        `{1.25 + 2.75}` silently failed to evaluate. It also had no concept
+        of Class/Struct/Instance member resolution, so static members
+        (`Counter.value`, `Counter.GetValue()`) and struct fields
+        (`point.x`) inside interpolation could not be resolved the same
+        way they are everywhere else in the language.
+
+        Reusing the real Lexer/Parser/interpreter pipeline means every
+        expression form supported by BlazeLang outside a string
+        (arithmetic, comparisons, boolean logic, function calls, instance
+        method calls, struct/class/static member access, chained access,
+        indexing, literals, ...) is automatically supported inside `{...}`
+        too, with identical semantics and error handling -- there is only
+        one expression evaluator in the whole interpreter now.
         """
-        if not expr:
+        if not expr or not expr.strip():
             return ''
 
-        expr = expr.strip()
+        # Local import: avoids a module-level import cycle, since the
+        # lexer/parser modules are otherwise independent of the interpreter.
+        from blazelang.lexer.lexer import Lexer
+        from blazelang.parser.parser import Parser
+        from blazelang.errors.error_handler import BlazeError as _BlazeBaseError
 
-        # Handle function calls: FuncName(args)
-        # Must check this first since it can contain dots and brackets
-        func_match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\)$', expr)
-        if func_match:
-            func_name = func_match.group(1)
-            args_str = func_match.group(2).strip()
-
-            # Parse arguments
-            args = self._parse_embedded_args(args_str)
-
-            # Get the function from scope
-            func = None
-            if func_name in self.current_scope:
-                func = self.current_scope[func_name]['value']
-            elif func_name in self.global_scope:
-                func = self.global_scope[func_name]['value']
-
-            if func and callable(func):
-                # Evaluate each argument
-                evaluated_args = []
-                for arg in args:
-                    # Try to evaluate as expression first
-                    try:
-                        evaluated_args.append(self._evaluate_embedded_expression(arg))
-                    except:
-                        # If that fails, try as simple variable
-                        if arg in self.current_scope:
-                            evaluated_args.append(self.current_scope[arg]['value'])
-                        elif arg in self.global_scope:
-                            evaluated_args.append(self.global_scope[arg]['value'])
-                        else:
-                            evaluated_args.append(arg)
-
-                # Call the function
-                if isinstance(func, Function):
-                    return func(self, evaluated_args)
-                else:
-                    # Built-in functions
-                    try:
-                        result = func(*evaluated_args)
-                        return result
-                    except Exception as e:
-                        return f'{{Error: {str(e)}}}'
-            else:
-                return f'{{Unknown function: {func_name}}}'
-
-        # Handle chained property/array access: var.prop.subprop[0]
-        if '.' in expr or '[' in expr:
-            return self._evaluate_chained_expression(expr)
-
-        # Handle logical operators
-        logic_match = self._match_operator_outside_brackets(expr, ['and', 'or'])
-        if logic_match:
-            left_expr = logic_match[0].strip()
-            op = logic_match[1]
-            right_expr = logic_match[2].strip()
-
-            left = self._evaluate_embedded_expression(left_expr)
-
-            if op == 'and':
-                if not self.is_truthy(left):
-                    return left
-                return self._evaluate_embedded_expression(right_expr)
-            elif op == 'or':
-                if self.is_truthy(left):
-                    return left
-                return self._evaluate_embedded_expression(right_expr)
-
-        # Handle comparison operators
-        comp_match = self._match_operator_outside_brackets(expr, ['==', '!=', '>=', '<=', '>', '<'])
-        if comp_match:
-            left_expr = comp_match[0].strip()
-            op = comp_match[1]
-            right_expr = comp_match[2].strip()
-
-            left = self._evaluate_embedded_expression(left_expr)
-            right = self._evaluate_embedded_expression(right_expr)
-
-            comparisons = {
-                '==': lambda a, b: a == b,
-                '!=': lambda a, b: a != b,
-                '>': lambda a, b: a > b,
-                '<': lambda a, b: a < b,
-                '>=': lambda a, b: a >= b,
-                '<=': lambda a, b: a <= b,
-            }
-            if op in comparisons:
-                return comparisons[op](left, right)
-
-        # Handle arithmetic: a + b, a - b, a * b, a / b, a % b
-        arith_match = self._match_operator_outside_brackets(expr, ['+', '-', '*', '/', '%'])
-        if arith_match:
-            left_expr = arith_match[0].strip()
-            op = arith_match[1]
-            right_expr = arith_match[2].strip()
-
-            left = self._evaluate_embedded_expression(left_expr)
-            right = self._evaluate_embedded_expression(right_expr)
-
-            try:
-                # Handle string concatenation with +
-                if isinstance(left, str) or isinstance(right, str):
-                    if op == '+':
-                        return str(left) + str(right)
-                    raise ValueError("Cannot perform arithmetic on strings")
-
-                # Convert to numbers
-                left_num = float(left) if not isinstance(left, (int, float)) else left
-                right_num = float(right) if not isinstance(right, (int, float)) else right
-
-                if op == '+':
-                    return left_num + right_num
-                elif op == '-':
-                    return left_num - right_num
-                elif op == '*':
-                    return left_num * right_num
-                elif op == '/':
-                    return left_num / right_num if right_num != 0 else float('inf')
-                elif op == '%':
-                    return left_num % right_num
-            except (ValueError, TypeError):
-                pass
-
-        # Handle not operator
-        if expr.startswith('not '):
-            inner = expr[4:].strip()
-            value = self._evaluate_embedded_expression(inner)
-            return not self.is_truthy(value)
-
-        # Simple variable lookup - check current scope first
-        if expr in self.current_scope:
-            return self.current_scope[expr]['value']
-
-        # Then check global scope
-        if expr in self.global_scope:
-            return self.global_scope[expr]['value']
-
-        # Handle boolean literals
-        if expr == 'true':
-            return True
-        if expr == 'false':
-            return False
-        if expr == 'null':
-            return None
-
-        # Handle numeric literals
         try:
-            if '.' in expr:
-                return float(expr)
-            return int(expr)
-        except ValueError:
-            pass
-
-        # Handle string literals
-        if (expr.startswith('"') and expr.endswith('"')) or \
-           (expr.startswith("'") and expr.endswith("'")):
-            return expr[1:-1]
-
-        # If nothing matches, return the expression as a string
-        return f'{{{expr}}}'
-
-    def _evaluate_chained_expression(self, expr: str) -> Any:
-        """
-        Evaluate chained property and array access
-        Example: student.subjects[0], Reverse(fruits)[0]
-        """
-        # First check if it starts with a function call
-        func_match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\)(.*)$', expr)
-        if func_match:
-            func_name = func_match.group(1)
-            args_str = func_match.group(2).strip()
-            rest = func_match.group(3).strip()
-
-            args = self._parse_embedded_args(args_str)
-
-            func = None
-            if func_name in self.current_scope:
-                func = self.current_scope[func_name]['value']
-            elif func_name in self.global_scope:
-                func = self.global_scope[func_name]['value']
-
-            if func and callable(func):
-                evaluated_args = []
-                for arg in args:
-                    try:
-                        evaluated_args.append(self._evaluate_embedded_expression(arg))
-                    except:
-                        if arg in self.current_scope:
-                            evaluated_args.append(self.current_scope[arg]['value'])
-                        elif arg in self.global_scope:
-                            evaluated_args.append(self.global_scope[arg]['value'])
-                        else:
-                            evaluated_args.append(arg)
-
-                if isinstance(func, Function):
-                    value = func(self, evaluated_args)
-                else:
-                    value = func(*evaluated_args)
-
-                # Process the rest of the chain
-                if rest:
-                    return self._process_chain(value, rest)
-                return value
-
-        # Tokenize the expression for property/array access
-        tokens = []
-        current = ''
-        i = 0
-
-        while i < len(expr):
-            if expr[i] == '.':
-                if current:
-                    tokens.append(('id', current))
-                    current = ''
-                i += 1
-                prop = ''
-                while i < len(expr) and (expr[i].isalnum() or expr[i] == '_'):
-                    prop += expr[i]
-                    i += 1
-                if prop:
-                    tokens.append(('dot', prop))
-            elif expr[i] == '[':
-                if current:
-                    tokens.append(('id', current))
-                    current = ''
-                i += 1
-                bracket_depth = 1
-                index_expr = ''
-                while i < len(expr) and bracket_depth > 0:
-                    if expr[i] == '[':
-                        bracket_depth += 1
-                    elif expr[i] == ']':
-                        bracket_depth -= 1
-                        if bracket_depth > 0:
-                            index_expr += expr[i]
-                    else:
-                        index_expr += expr[i]
-                    i += 1
-                tokens.append(('bracket', index_expr.strip()))
-            else:
-                current += expr[i]
-                i += 1
-
-        if current:
-            tokens.append(('id', current))
-
-        if not tokens:
+            tokens = Lexer(expr, self.filename).tokenize()
+            expr_ast = Parser(tokens).parse_expression()
+        except Exception:
+            # Not a parseable expression (e.g. genuinely literal text that
+            # happens to be wrapped in braces) -- leave it untouched rather
+            # than raising out of string interpolation.
             return f'{{{expr}}}'
 
-        # Get initial value
-        first_token = tokens[0]
-        if first_token[0] == 'id':
-            value = None
-            if first_token[1] in self.current_scope:
-                value = self.current_scope[first_token[1]]['value']
-            elif first_token[1] in self.global_scope:
-                value = self.global_scope[first_token[1]]['value']
-
-            if value is None:
-                return f'{{{expr}}}'
-        else:
+        try:
+            return self.visit(expr_ast)
+        except _BlazeBaseError:
+            # A real BlazeLang runtime error (undefined variable, type
+            # error, etc) from inside an interpolated expression should
+            # surface exactly like it would anywhere else in the program.
+            raise
+        except Exception:
             return f'{{{expr}}}'
-
-        # Follow the chain
-        for token_type, token_value in tokens[1:]:
-            if token_type == 'dot':
-                if isinstance(value, dict):
-                    value = value.get(token_value)
-                elif isinstance(value, Instance):
-                    value = value.get(token_value)
-                elif isinstance(value, list):
-                    if token_value == 'length':
-                        value = len(value)
-                    else:
-                        # Try to get attribute
-                        if hasattr(value, token_value):
-                            value = getattr(value, token_value)
-                elif isinstance(value, str):
-                    if token_value == 'length':
-                        value = len(value)
-                else:
-                    return f'{{{expr}}}'
-            elif token_type == 'bracket':
-                index = self._evaluate_embedded_expression(token_value)
-                if isinstance(value, (list, str)):
-                    try:
-                        value = value[int(index)]
-                    except (ValueError, IndexError):
-                        return f'{{{expr}}}'
-                elif isinstance(value, dict):
-                    value = value.get(index)
-                else:
-                    return f'{{{expr}}}'
-
-        return value
-
-    def _process_chain(self, value: Any, chain: str) -> Any:
-        """Process property/array access chain on a value"""
-        i = 0
-        while i < len(chain):
-            if chain[i] == '.':
-                i += 1
-                prop = ''
-                while i < len(chain) and (chain[i].isalnum() or chain[i] == '_'):
-                    prop += chain[i]
-                    i += 1
-
-                if isinstance(value, dict):
-                    value = value.get(prop)
-                elif isinstance(value, Instance):
-                    value = value.get(prop)
-                elif isinstance(value, list) and prop == 'length':
-                    value = len(value)
-                elif isinstance(value, str) and prop == 'length':
-                    value = len(value)
-                else:
-                    return value
-            elif chain[i] == '[':
-                i += 1
-                bracket_depth = 1
-                index_expr = ''
-                while i < len(chain) and bracket_depth > 0:
-                    if chain[i] == '[':
-                        bracket_depth += 1
-                    elif chain[i] == ']':
-                        bracket_depth -= 1
-                        if bracket_depth > 0:
-                            index_expr += chain[i]
-                    else:
-                        index_expr += chain[i]
-                    i += 1
-
-                index = self._evaluate_embedded_expression(index_expr.strip())
-                if isinstance(value, (list, str)):
-                    try:
-                        value = value[int(index)]
-                    except (ValueError, IndexError):
-                        return value
-                elif isinstance(value, dict):
-                    value = value.get(index)
-            else:
-                i += 1
-
-        return value
-
-    def _match_operator_outside_brackets(self, expr: str, operators: List[str]) -> tuple:
-        """
-        Find an operator that is not inside brackets or parentheses
-        Returns (left, operator, right) or None
-        """
-        depth = 0
-        sorted_ops = sorted(operators, key=len, reverse=True)
-
-        i = 0
-        in_string = False
-        string_char = None
-        while i < len(expr):
-            if in_string:
-                if expr[i] == string_char:
-                    in_string = False
-                    string_char = None
-                i += 1
-            elif expr[i] in '"\'':
-                in_string = True
-                string_char = expr[i]
-                i += 1
-            elif expr[i] in '([{':
-                depth += 1
-                i += 1
-            elif expr[i] in ')]}':
-                depth -= 1
-                i += 1
-            elif depth == 0:
-                for op in sorted_ops:
-                    if expr[i:i+len(op)] == op:
-                        if op.isalpha():
-                            before_ok = i == 0 or not expr[i-1].isalnum()
-                            after_ok = i+len(op) >= len(expr) or not expr[i+len(op)].isalnum()
-                            if before_ok and after_ok:
-                                return (expr[:i], op, expr[i+len(op):])
-                        else:
-                            return (expr[:i], op, expr[i+len(op):])
-                i += 1
-            else:
-                i += 1
-
-        return None
-
-    def _parse_embedded_args(self, args_str: str) -> List[str]:
-        """Parse argument string from embedded expression"""
-        if not args_str:
-            return []
-
-        args = []
-        current = ''
-        paren_depth = 0
-        bracket_depth = 0
-        in_string = False
-        string_char = None
-
-        for char in args_str:
-            if char in ['"', "'"] and not in_string:
-                in_string = True
-                string_char = char
-                current += char
-            elif char == string_char and in_string:
-                in_string = False
-                string_char = None
-                current += char
-            elif in_string:
-                current += char
-            elif char == '(':
-                paren_depth += 1
-                current += char
-            elif char == ')':
-                paren_depth -= 1
-                current += char
-            elif char == '[':
-                bracket_depth += 1
-                current += char
-            elif char == ']':
-                bracket_depth -= 1
-                current += char
-            elif char == ',' and paren_depth == 0 and bracket_depth == 0:
-                args.append(current.strip())
-                current = ''
-            else:
-                current += char
-
-        if current.strip():
-            args.append(current.strip())
-
-        return args
 
     # =====================
     # Helper Methods
@@ -2177,11 +1838,19 @@ class Interpreter:
             return 'Null'
         if isinstance(obj, bool):
             return 'Boolean'
+        # NOTE: bool is checked above (before int) because bool is a
+        # subclass of int in Python. From here on, Integer vs Float is
+        # decided purely by the runtime value's Python type, which the
+        # parser now preserves faithfully from the source literal (an
+        # INTEGER token produces a Python int, a FLOAT token produces a
+        # Python float) and arithmetic preserves via normal Python
+        # int/float promotion. A "whole" float such as 1.0 must stay a
+        # Float -- collapsing it to Integer by numeric value (the previous
+        # behavior) is what made `type(1.0)` and `type(2.5)` report the
+        # wrong thing.
         if isinstance(obj, int):
             return 'Integer'
         if isinstance(obj, float):
-            if float(obj) == int(obj):
-                return 'Integer'
             return 'Float'
         if isinstance(obj, str):
             return 'String'

@@ -1081,10 +1081,17 @@ class Parser:
         if not token:
             return None
         
-        # Number literals
+        # Number literals.
+        # IMPORTANT: INTEGER tokens must keep a Python `int` value (not be
+        # forced to `float`) so the interpreter can tell `1` (Integer) apart
+        # from `1.0` (Float) later -- see builtin_type() in interpreter.py,
+        # which distinguishes the two by Python type, not by numeric value.
+        # Forcing every literal to float here was the root cause of
+        # `type(1.0)`/`type(2.5)` reporting the wrong type: both an integer
+        # and a float literal became indistinguishable Python floats.
         if token.type == TokenType.INTEGER:
             self.advance()
-            return self._tag(NumberLiteral(value=float(token.value)), token)
+            return self._tag(NumberLiteral(value=token.value), token)
         
         if token.type == TokenType.FLOAT:
             self.advance()
