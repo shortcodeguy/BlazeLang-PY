@@ -3,9 +3,58 @@ Error handling and formatting for BlazeLang
 Provides detailed error messages with source code context
 """
 
-from typing import Optional, List
+from typing import Optional, List, Sequence
 import os
 import sys
+from difflib import get_close_matches
+
+
+def find_similar_name(name: str, known_names: Optional[Sequence[str]], n: int = 1, cutoff: float = 0.6) -> Optional[str]:
+    """Return the closest reasonably-similar name from `known_names`, or None.
+
+    Shared by every error class that wants a "Did you mean" suggestion so
+    typo suggestions stay consistent and conservative (only genuinely close
+    matches are offered -- nothing is invented).
+    """
+    if not known_names:
+        return None
+    candidates = [n2 for n2 in known_names if n2 and n2 != name]
+    if not candidates:
+        return None
+    matches = get_close_matches(name, candidates, n=n, cutoff=cutoff)
+    return matches[0] if matches else None
+
+
+def build_hint(summary: str, did_you_mean: Optional[str] = None, fixes: Optional[Sequence[str]] = None) -> str:
+    """Compose a beginner-friendly, multi-part hint string.
+
+    Kept as a single formatted string (rather than a new structured field)
+    so every existing call site that reads `error.hint` as text keeps
+    working unchanged -- this only changes what beginners see printed.
+    """
+    lines = [summary]
+    if did_you_mean:
+        lines.append("Did you mean:")
+        lines.append(f"  {did_you_mean}")
+    if fixes:
+        lines.append("Possible fixes:")
+        for fix in fixes:
+            lines.append(f"  \u2022 {fix}")
+    return "\n".join(lines)
+
+
+def _extract_quoted_name(message: str, prefixes: Sequence[str]) -> Optional[str]:
+    """Pull the first single-quoted name out of a message like
+    "Undefined variable 'usernme'" if the message starts with one of
+    `prefixes`. Used only to enrich hints for pre-existing bare-message
+    RuntimeErrors without touching how/where they're raised."""
+    for prefix in prefixes:
+        if message.startswith(prefix) and "'" in message:
+            try:
+                return message.split("'", 2)[1]
+            except IndexError:
+                return None
+    return None
 
 
 class BlazeError(Exception):
@@ -148,21 +197,52 @@ class RuntimeError(BlazeError):
         code: str = "BLZ2001",
         hint: str = None,
         note: str = None,
+        known_names: Optional[Sequence[str]] = None,
     ):
+        # Some call sites (e.g. the interpreter's undefined-variable check)
+        # raise this base class directly with a bare message rather than the
+        # more specific NameError subclass below. When no explicit hint was
+        # given, recognize that common "Undefined variable/function 'x'"
+        # shape and produce the same rich, beginner-friendly hint -- without
+        # changing the message text, code, or any interpreter behavior.
+        if hint is None and code == "BLZ2001":
+            undefined_name = _extract_quoted_name(message, prefixes=("Undefined variable", "Undefined function"))
+            if undefined_name:
+                suggestion = find_similar_name(undefined_name, known_names)
+                hint = build_hint(
+                    f"'{undefined_name}' was not declared before it was used.",
+                    did_you_mean=suggestion,
+                    fixes=[
+                        "Check the spelling.",
+                        "Declare it before using it.",
+                        "Check its scope.",
+                    ],
+                )
         super().__init__(f"Runtime Error: {message}", line, column, filename, code=code, hint=hint, note=note)
 
 
 class NameError(RuntimeError):
     """Raised when an undefined identifier/variable is accessed"""
 
-    def __init__(self, var_name: str, line: int = None, column: int = None, filename: str = None):
+    def __init__(self, var_name: str, line: int = None, column: int = None, filename: str = None,
+                 known_names: Optional[Sequence[str]] = None):
+        suggestion = find_similar_name(var_name, known_names)
+        summary = f"Variable '{var_name}' was not declared before it was used."
         super().__init__(
             f"Undefined variable or function '{var_name}'",
             line,
             column,
             filename,
             code="BLZ2002",
-            hint=f"Did you spell '{var_name}' correctly? Ensure it is defined before reading it.",
+            hint=build_hint(
+                summary,
+                did_you_mean=suggestion,
+                fixes=[
+                    "Check the spelling.",
+                    "Declare the variable before using it.",
+                    "Check the variable's scope.",
+                ],
+            ),
         )
 
 
@@ -176,7 +256,14 @@ class ZeroDivisionError(RuntimeError):
             column,
             filename,
             code="BLZ2003",
-            hint="Make sure the right side of '/' or '%' cannot evaluate to zero.",
+            hint=build_hint(
+                "The right-hand side of '/' or '%' evaluated to 0, which is undefined.",
+                fixes=[
+                    "Check where that value comes from before dividing.",
+                    "Guard the operation with 'if divisor != 0'.",
+                    "Use a default/fallback value when the divisor could be zero.",
+                ],
+            ),
             note="Mathematically, division by zero is undefined.",
         )
 
@@ -184,14 +271,27 @@ class ZeroDivisionError(RuntimeError):
 class TypeError(BlazeError):
     """Raised for incompatible data type operations"""
 
-    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None,
+                 left_type: str = None, right_type: str = None, operator: str = None):
+        if operator and left_type and right_type:
+            summary = f"'{operator}' can't be used between {left_type} and {right_type}."
+            fixes = [
+                f"Convert one side so both are the same type before using '{operator}'.",
+                "Check where each value comes from -- one of them isn't the type you expect.",
+            ]
+        else:
+            summary = message
+            fixes = [
+                "Check that values on both sides of an operator match the expected type.",
+                "Check that arguments passed to a function match its expected types.",
+            ]
         super().__init__(
             f"Type Error: {message}",
             line,
             column,
             filename,
             code="BLZ2004",
-            hint="Check that values on both sides of an operator or function argument match expected types.",
+            hint=build_hint(summary, fixes=fixes),
         )
 
 
@@ -199,13 +299,26 @@ class IndexError(BlazeError):
     """Raised when accessing a list/array index that is out of bounds"""
 
     def __init__(self, index: int, length: int, line: int = None, column: int = None, filename: str = None):
+        if length > 0:
+            summary = f"Index {index} is outside the valid range for a list of size {length}."
+            fixes = [
+                f"Use an index between 0 and {length - 1}.",
+                "Check the list's length before indexing, e.g. with a bounds check.",
+                "Remember indices count from 0, not 1.",
+            ]
+        else:
+            summary = "The list is currently empty, so no index is valid."
+            fixes = [
+                "Make sure the list has items before indexing into it.",
+                "Check whatever produced this list -- it may be empty unexpectedly.",
+            ]
         super().__init__(
             f"Index '{index}' is out of bounds for list of size {length}",
             line,
             column,
             filename,
             code="BLZ2005",
-            hint=f"Valid indices range from 0 to {length - 1}." if length > 0 else "The list is currently empty.",
+            hint=build_hint(summary, fixes=fixes),
         )
 
 
@@ -250,13 +363,21 @@ class AccessError(RuntimeError):
 
     def __init__(self, member_name: str, class_name: str = None, line: int = None, column: int = None, filename: str = None):
         where = f" of class '{class_name}'" if class_name else ""
+        class_ref = f"'{class_name}'" if class_name else "its class"
         super().__init__(
             f"'{member_name}'{where} is private and cannot be accessed from outside the class",
             line,
             column,
             filename,
             code="BLZ2008",
-            hint="Private members are only reachable from inside their own class, e.g. via 'this'. Expose a public method instead if outside access is needed.",
+            hint=build_hint(
+                f"'{member_name}' is marked private, so it can only be used from inside {class_ref}.",
+                fixes=[
+                    f"Access '{member_name}' from a method inside the class, e.g. via 'this.{member_name}'.",
+                    "Add a public method that exposes what you need instead.",
+                    "Remove the 'private' modifier if outside access is actually intended.",
+                ],
+            ),
         )
 
 
@@ -289,36 +410,64 @@ class ImmutableError(RuntimeError):
             column,
             filename,
             code="BLZ2009",
-            hint=f"'{name}' was declared with a constant/fixed declaration. Use a regular variable if it needs to change.",
+            hint=build_hint(
+                f"'{name}' was declared with 'constant' and can only be assigned once.",
+                fixes=[
+                    f"Declare '{name}' with 'var' instead if its value needs to change.",
+                    f"Use a different variable name for the new value.",
+                    f"Check whether '{name}' really needed to change here, or if this was a mistake.",
+                ],
+            ),
         )
 
 
 class NotCallableError(RuntimeError):
     """Raised when attempting to call a value that isn't a function, method, or class"""
 
-    def __init__(self, name: str, actual_type: str = None, line: int = None, column: int = None, filename: str = None):
+    def __init__(self, name: str, actual_type: str = None, line: int = None, column: int = None, filename: str = None,
+                 known_names: Optional[Sequence[str]] = None):
         type_note = f" (found {actual_type})" if actual_type else ""
+        found_text = f" it's actually of type {actual_type}" if actual_type else " it isn't a function, method, or class"
+        suggestion = find_similar_name(name, known_names)
         super().__init__(
             f"'{name}' is not callable{type_note}",
             line,
             column,
             filename,
             code="BLZ2010",
-            hint=f"Check that '{name}' is actually a function, method, or class before calling it with '()'.",
+            hint=build_hint(
+                f"'{name}' was called with '()', but{found_text}.",
+                did_you_mean=suggestion,
+                fixes=[
+                    f"Remove the '()' if '{name}' is a value, not a function.",
+                    "Check the spelling -- you may be calling the wrong name.",
+                    f"Make sure '{name}' is assigned a function/class before it's called.",
+                ],
+            ),
         )
 
 
 class PropertyError(RuntimeError):
     """Raised when accessing or assigning a property that doesn't exist or isn't valid on a value"""
 
-    def __init__(self, property_name: str, target_type: str, line: int = None, column: int = None, filename: str = None):
+    def __init__(self, property_name: str, target_type: str, line: int = None, column: int = None, filename: str = None,
+                 known_properties: Optional[Sequence[str]] = None):
+        suggestion = find_similar_name(property_name, known_properties)
         super().__init__(
             f"Cannot access property '{property_name}' of {target_type}",
             line,
             column,
             filename,
             code="BLZ2011",
-            hint=f"Verify that '{property_name}' is actually defined on this {target_type}, and that the value isn't null.",
+            hint=build_hint(
+                f"'{property_name}' isn't a known property on this {target_type}.",
+                did_you_mean=suggestion,
+                fixes=[
+                    "Check the spelling of the property name.",
+                    f"Confirm '{property_name}' is actually defined on this {target_type}.",
+                    "Check the value isn't null before accessing a property on it.",
+                ],
+            ),
         )
 
 
@@ -333,7 +482,14 @@ class RecursionError(RuntimeError):
             column,
             filename,
             code="BLZ2012",
-            hint="Check for a function that calls itself without a base case, or a loop-like recursion that never terminates.",
+            hint=build_hint(
+                "A function kept calling itself (directly or indirectly) without ever stopping.",
+                fixes=[
+                    "Add a base case that returns without recursing further.",
+                    "Make sure each recursive call moves the input closer to the base case.",
+                    "Check for two functions that call each other in a loop.",
+                ],
+            ),
         )
 
 
@@ -426,13 +582,21 @@ class StaticContextError(RuntimeError):
     """Raised when 'this'/'super' is used inside a static function, or an instance member is accessed via the class"""
 
     def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        keyword = "'super'" if "super" in message else "'this'"
         super().__init__(
             message,
             line,
             column,
             filename,
             code="BLZ2019",
-            hint="Static functions don't have access to 'this'. Use an instance method instead, or pass data in as a parameter.",
+            hint=build_hint(
+                f"{keyword} was used somewhere it isn't available -- typically inside a static function.",
+                fixes=[
+                    "Remove 'static' from the function if it needs 'this'/'super'.",
+                    "Call this from an instance method instead of a static one.",
+                    "Pass any needed data in as a parameter instead of using 'this'.",
+                ],
+            ),
         )
 
 
@@ -819,14 +983,27 @@ class TooManyArgumentsError(RuntimeError):
 class ImportError(BlazeError):
     """Raised for module import failures"""
 
-    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None,
+                 known_modules: Optional[Sequence[str]] = None):
+        suggestion = None
+        imported_name = _extract_quoted_name(message, prefixes=("'",)) if message.startswith("'") else None
+        if imported_name and known_modules:
+            suggestion = find_similar_name(imported_name, known_modules)
         super().__init__(
             f"Import Error: {message}",
             line,
             column,
             filename,
             code="BLZ3001",
-            hint="Verify that the file/module path is spelled correctly and installed in the load path.",
+            hint=build_hint(
+                "The import could not be resolved as written.",
+                did_you_mean=suggestion,
+                fixes=[
+                    "Check the spelling of the module or file path.",
+                    "Confirm the module is actually exported (check for 'Export' in that file).",
+                    "Make sure the path is correct relative to this file.",
+                ],
+            ),
         )
 
 
@@ -1054,6 +1231,88 @@ class InternalInterpreterError(BlazeError):
         )
 
 
+# --- Warning Diagnostics ---
+# The parser emits static warnings as plain (line, column, message) tuples,
+# where the BLZW code is embedded in the message text, e.g.
+# "Duplicate import of 'math' (BLZW1004)". This lookup lets any consumer
+# (CLI, VS Code extension) attach a specific, beginner-friendly hint to a
+# warning without changing that tuple format or touching the parser.
+
+WARNING_HINTS = {
+    "BLZW1003": build_hint(
+        "This function has no statements in its body, so calling it does nothing.",
+        fixes=[
+            "Add the intended logic inside the function body.",
+            "Add 'return' with a value if the function is meant to produce one.",
+            "Remove the function if it isn't needed yet.",
+        ],
+    ),
+    "BLZW1004": build_hint(
+        "This module was already imported earlier in the file.",
+        fixes=[
+            "Remove the duplicate 'Import' statement.",
+            "Combine both imports into a single statement if you need multiple names from it.",
+        ],
+    ),
+}
+
+
+class WarningFormatter:
+    """Formats the (line, column, message) warning tuples produced by the
+    parser into a beginner-friendly diagnostic, mirroring format_diagnostic
+    for errors. Does not change what the parser collects -- only how a
+    warning tuple is rendered."""
+
+    @staticmethod
+    def _extract_code(message: str) -> Optional[str]:
+        if "(BLZW" in message and message.endswith(")"):
+            return message[message.rfind("(") + 1: -1]
+        return None
+
+    @staticmethod
+    def get_hint(message: str) -> Optional[str]:
+        code = WarningFormatter._extract_code(message)
+        return WARNING_HINTS.get(code) if code else None
+
+    @staticmethod
+    def format_diagnostic(warning_tuple, source_code: str = None, color: bool = None) -> str:
+        """Render a warning tuple (line, column, message) the same way
+        format_diagnostic renders an error, using yellow instead of red."""
+        line, column, message = warning_tuple
+        if color is None:
+            color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+        yellow, cyan, green, reset = (
+            ("\033[93m", "\033[96m", "\033[92m", "\033[0m") if color else ("", "", "", "")
+        )
+
+        code = WarningFormatter._extract_code(message) or "BLZW"
+        title = f"BlazeLang [{code}] Warning"
+        bar = "=" * 56
+        lines = [f"{yellow}{bar}", title, f"{bar}{reset}", "", message]
+
+        if line is not None:
+            lines.extend([
+                "",
+                f"{cyan}Location{reset}",
+                f"Line   : {line}",
+                f"Column : {column if column is not None else '?'}",
+            ])
+
+        if source_code and line and 1 <= line <= len(source_code.splitlines()):
+            source_line = source_code.splitlines()[line - 1]
+            col = column or 1
+            pointer = f"{' ' * (len(str(line)) + 3 + max(0, col - 1))}{yellow}^{reset}"
+            lines.extend(["", f"{line} | {source_line}", pointer])
+
+        hint = WarningFormatter.get_hint(message)
+        if hint:
+            lines.extend(["", f"{green}Hint{reset}", hint])
+
+        lines.append(f"{yellow}{bar}{reset}")
+        return "\n".join(lines)
+
+
 # --- Error Formatter ---
 
 class ErrorFormatter:
@@ -1090,9 +1349,9 @@ class ErrorFormatter:
             "ParserError": "Check your code layout. Make sure all parentheses and brackets close.",
             "UnexpectedTokenError": "Look just before this location for a missing operator, comma, or closing symbol.",
             "UnterminatedError": "Make sure strings, comments, or blocks are properly closed.",
-            "NameError": "Double-check variable name spelling or declare it before referencing.",
-            "ZeroDivisionError": "Ensure the divisor value is greater or less than zero.",
-            "TypeError": "Confirm the types of values being combined or passed to functions.",
+            "NameError": "Check the spelling, and make sure the name is declared before it's used.",
+            "ZeroDivisionError": "Make sure the divisor can't evaluate to zero; guard it with a check first.",
+            "TypeError": "Confirm the types of values being combined or passed to functions match.",
             "IndexError": "Make sure your index stays within 0 and the size of your list minus 1.",
             "KeyError": "Confirm the key exists in your map before reading it.",
             "ArgumentError": "Check the function definition to see how many arguments it needs.",
