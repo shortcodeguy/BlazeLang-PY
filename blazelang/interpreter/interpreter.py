@@ -26,6 +26,10 @@ from blazelang.errors.error_handler import (
     StructConstructionError,
     StructInheritanceError,
     IndexError as BlazeIndexError,
+    DuplicateEnumValueError,
+    EnumValueNotFoundError,
+    ArgumentError,
+    ValueError as BlazeValueError,
 )
 from typing import Any, Callable, Dict, List
 import re
@@ -33,6 +37,7 @@ import math
 from pathlib import Path
 import os
 from difflib import get_close_matches
+from builtins import ValueError as PyValueError
 
 
 class ReturnException(Exception):
@@ -508,6 +513,73 @@ class StructInstance:
         return self.__str__()
 
 
+class EnumType:
+    """Represents a BlazeLang Enum type -- a named, closed set of immutable
+    members. Independent of the Class/Struct systems: no methods, fields,
+    constructors, or inheritance. Members are stored in declaration order
+    so iteration/inspection (and error messages) reflect source order."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.members: Dict[str, 'EnumValue'] = {}
+        self.members_in_order: List['EnumValue'] = []
+
+    def values(self) -> List['EnumValue']:
+        """Return all members, in declaration order -- backs Enum.values()."""
+        return list(self.members_in_order)
+
+    def from_value(self, value, line=None, column=None, filename=None) -> 'EnumValue':
+        """Return the member whose resolved value equals `value` -- backs
+        Enum.fromValue(value). Matching is exact on both type and value
+        (an Integer value never matches a String-valued member and vice
+        versa, and a Boolean is never treated as an Integer 0/1 match)."""
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise EnumValueNotFoundError(self.name, value, line, column, filename)
+        for member in self.members_in_order:
+            if type(member.value) is type(value) and member.value == value:
+                return member
+        raise EnumValueNotFoundError(self.name, value, line, column, filename)
+
+    def __str__(self):
+        return f"<enum {self.name}>"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class EnumValue:
+    """A single immutable member of a BlazeLang Enum (e.g. Status.Pending).
+    Kept as its own runtime type (not a plain int/string) so that two
+    different Enums with equal underlying values never compare equal to
+    each other -- equality/hash are based on (enum type identity, member
+    name), not on the underlying value alone."""
+
+    def __init__(self, enum_type: EnumType, name: str, value):
+        self.enum_type = enum_type
+        self.name = name
+        self.value = value
+
+    def __eq__(self, other):
+        if isinstance(other, EnumValue):
+            return self.enum_type is other.enum_type and self.name == other.name
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash((id(self.enum_type), self.name))
+
+    def __str__(self):
+        return f"{self.enum_type.name}.{self.name}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class Interpreter:
     """Tree-walking interpreter for BlazeLang"""
 
@@ -904,6 +976,120 @@ class Interpreter:
         }
         return None
 
+    def visit_EnumDeclaration(self, node: EnumDeclaration) -> None:
+        """Register an Enum type. Members are evaluated once, in
+        declaration order: an explicit value is used as-is, and a member
+        with no explicit value auto-increments from the previous *numeric*
+        value (starting at 0), independent of any string-valued members
+        that may appear alongside it. Duplicate member names are already
+        rejected by the parser; duplicate resolved values are rejected
+        here, since implicit auto-increment can only be resolved at this
+        point."""
+        enum_type = EnumType(node.name)
+        seen_values = {}
+        next_numeric = 0
+
+        for member in node.members:
+            if member.value is not None:
+                value = self.visit(member.value)
+                if isinstance(value, int):
+                    next_numeric = value + 1
+            else:
+                value = next_numeric
+                next_numeric += 1
+
+            value_key = (type(value).__name__, value)
+            if value_key in seen_values:
+                raise DuplicateEnumValueError(
+                    node.name, member.name, value,
+                    member.line, member.column, member.filename,
+                )
+            seen_values[value_key] = member.name
+
+            enum_value = EnumValue(enum_type, member.name, value)
+            enum_type.members[member.name] = enum_value
+            enum_type.members_in_order.append(enum_value)
+
+        self.current_scope[node.name] = {
+            'value': enum_type,
+            'constant': True,
+        }
+        return None
+
+    def _enum_values_call(self, enum_type: EnumType, args) -> List[EnumValue]:
+        """Validates the argument count for Enum.values() before delegating
+        to EnumType.values, for the same reason as _enum_from_value_call."""
+        if args:
+            raise ArgumentError(f"{enum_type.name}.values", 0, len(args))
+        return enum_type.values()
+
+    def _enum_from_value_call(self, enum_type: EnumType, args) -> EnumValue:
+        """Validates the argument count for Enum.fromValue(value) before
+        delegating to EnumType.from_value, so a wrong call arity produces a
+        normal BlazeLang ArgumentError instead of a raw Python TypeError."""
+        if len(args) != 1:
+            raise ArgumentError(f"{enum_type.name}.fromValue", 1, len(args))
+        return enum_type.from_value(args[0])
+
+    def _list_append_call(self, items: list, method_name: str, args) -> None:
+        """Shared implementation backing both list.append() and list.push():
+        validates the argument count, then mutates `items` in place by
+        adding the single given value to the end. Both method names funnel
+        through here so they stay perfectly in sync. Returns None, matching
+        BlazeLang's other in-place mutating calls (e.g. Reverse mutates and
+        returns; here there's no useful return value, so None is used)."""
+        if len(args) != 1:
+            raise ArgumentError(f"list.{method_name}", 1, len(args))
+        items.append(args[0])
+        return None
+
+    def _list_remove_call(self, items: list, args) -> None:
+        """Implementation backing list.remove(value): validates the argument
+        count, then mutates `items` in place by removing the first matching
+        occurrence of the given value. Raises a BlazeLang ValueError (rather
+        than a raw Python ValueError) if the value isn't present, mirroring
+        how other builtins translate Python exceptions into BlazeLang ones."""
+        if len(args) != 1:
+            raise ArgumentError("list.remove", 1, len(args))
+        value = args[0]
+        try:
+            items.remove(value)
+        except PyValueError:
+            raise BlazeValueError(f"Value {value!r} not found in list")
+        return None
+
+    def _list_contains_call(self, items: list, args) -> bool:
+        """Implementation backing list.contains(value): validates the
+        argument count, then reports whether the value occurs anywhere in
+        the list. Read-only -- does not mutate `items`."""
+        if len(args) != 1:
+            raise ArgumentError("list.contains", 1, len(args))
+        return args[0] in items
+
+    def _list_insert_call(self, items: list, args) -> None:
+        """Implementation backing list.insert(index, value): validates the
+        argument count and that `index` is an integer (reusing the same
+        integer-check rules as _resolve_index), then mutates `items` in
+        place by inserting `value` at that position. Unlike normal element
+        access/assignment, an out-of-range index is not an error here --
+        Python's own list.insert clamps to the nearest valid position (e.g.
+        an index past the end simply appends), and that clamping behavior
+        is preserved rather than reproducing _resolve_index's strict range
+        check, since "insert past the end" is a normal, useful thing to do."""
+        if len(args) != 2:
+            raise ArgumentError("list.insert", 2, len(args))
+        index, value = args
+        if isinstance(index, bool) or not isinstance(index, (int, float)):
+            raise BlazeTypeError(
+                f"List index must be an integer, got {type(index).__name__}"
+            )
+        if isinstance(index, float) and not index.is_integer():
+            raise BlazeTypeError(
+                f"List index must be an integer, got Float ({index})"
+            )
+        items.insert(int(index), value)
+        return None
+
     # =====================
     # Expression Visitors
     # =====================
@@ -1038,6 +1224,14 @@ class Interpreter:
             elif node.operator == '/=':
                 current = obj.get(node.property_name, 1)
                 obj[node.property_name] = current / value
+        elif isinstance(obj, EnumType):
+            # Enum members are immutable -- reject 'Status.Pending = ...'
+            # the same way reassigning any other constant is rejected.
+            raise ImmutableError(f"{obj.name}.{node.property_name}")
+        elif isinstance(obj, EnumValue):
+            # An Enum member's '.name'/'.value' are read-only, same as the
+            # member itself.
+            raise ImmutableError(f"{obj.enum_type.name}.{obj.name}.{node.property_name}")
 
         return value
 
@@ -1322,6 +1516,32 @@ class Interpreter:
                 return func
             raise PropertyError(node.property, f"class '{obj.name}' (no such static member)")
 
+        if isinstance(obj, EnumType):
+            # 'values'/'fromValue' are Enum-level utilities, checked before
+            # member lookup so they can't be shadowed by a same-named
+            # member -- mirrors how Class exposes hasAttribute/getAttribute.
+            if node.property == 'values':
+                return lambda *args: self._enum_values_call(obj, args)
+            if node.property == 'fromValue':
+                return lambda *args: self._enum_from_value_call(obj, args)
+            member = obj.members.get(node.property)
+            if member is None:
+                raise PropertyError(
+                    node.property, f"enum '{obj.name}'",
+                    known_properties=[m.name for m in obj.members_in_order] + ['values', 'fromValue'],
+                )
+            return member
+
+        if isinstance(obj, EnumValue):
+            if node.property == 'name':
+                return obj.name
+            if node.property == 'value':
+                return obj.value
+            raise PropertyError(
+                node.property, f"enum member '{obj.enum_type.name}.{obj.name}'",
+                known_properties=['name', 'value'],
+            )
+
         if isinstance(obj, str):
             if node.property == 'length':
                 return len(obj)
@@ -1329,6 +1549,19 @@ class Interpreter:
         if isinstance(obj, list):
             if node.property == 'length':
                 return len(obj)
+            # append()/push() are aliases of the same underlying mutation --
+            # both are exposed as small lambdas that route through
+            # _list_append_call so argument-count validation and the actual
+            # mutation logic live in exactly one place.
+            if node.property in ('append', 'push'):
+                method_name = node.property
+                return lambda *args: self._list_append_call(obj, method_name, args)
+            if node.property == 'remove':
+                return lambda *args: self._list_remove_call(obj, args)
+            if node.property == 'contains':
+                return lambda *args: self._list_contains_call(obj, args)
+            if node.property == 'insert':
+                return lambda *args: self._list_insert_call(obj, args)
 
         # Check if object has the property as an attribute
         if hasattr(obj, node.property):
@@ -1863,6 +2096,10 @@ class Interpreter:
             return obj.cls.name
         if isinstance(obj, StructInstance):
             return obj.struct_type.name
+        if isinstance(obj, EnumValue):
+            return obj.enum_type.name
+        if isinstance(obj, EnumType):
+            return 'Enum'
         return type(obj).__name__
 
     def builtin_Upper(self, text: str) -> str:

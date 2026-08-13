@@ -31,6 +31,7 @@ class Lexer:
             'Function': TokenType.FUNCTION,
             'Class': TokenType.CLASS,
             'Struct': TokenType.STRUCT,
+            'Enum': TokenType.ENUM,
             'Constructor': TokenType.CONSTRUCTOR,
             'return': TokenType.RETURN,
             'Break': TokenType.BREAK,

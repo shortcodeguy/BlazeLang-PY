@@ -1,0 +1,17 @@
+// BlazeLang List: append() and push()
+
+var fruits = ["Apple", "Banana"]
+
+Show("Initial:", fruits)
+
+fruits.append("Mango")
+Show("After append:", fruits)
+
+fruits.push("Orange")
+Show("After push:", fruits)
+
+fruits.append("Grapes")
+fruits.push("Watermelon")
+fruits.remove("Grapes")
+
+Show("Final:", fruits)

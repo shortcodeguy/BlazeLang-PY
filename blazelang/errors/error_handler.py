@@ -718,6 +718,86 @@ class StructInheritanceError(BlazeError):
         )
 
 
+# --- Enum Errors ---
+
+class DuplicateEnumMemberError(BlazeError):
+    """Raised when an Enum declares the same member name more than once"""
+
+    def __init__(self, enum_name: str, member_name: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Enum '{enum_name}' declares member '{member_name}' more than once",
+            line,
+            column,
+            filename,
+            code="BLZ2050",
+            hint=f"Remove the duplicate '{member_name}' member from Enum '{enum_name}'.",
+        )
+
+
+class InvalidEnumMemberError(BlazeError):
+    """Raised for a malformed member declaration inside an Enum body"""
+
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Invalid Enum member: {message}",
+            line,
+            column,
+            filename,
+            code="BLZ2051",
+            hint="Enum bodies contain plain members only, e.g. 'Pending' or 'Pending = 1'.",
+        )
+
+
+class InvalidEnumValueError(BlazeError):
+    """Raised when an Enum member's explicit value isn't an integer or string literal"""
+
+    def __init__(self, enum_name: str, member_name: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Enum '{enum_name}' member '{member_name}' has an invalid value",
+            line,
+            column,
+            filename,
+            code="BLZ2052",
+            hint="Enum member values must be a plain integer or string literal, e.g. '= 1' or '= \"admin\"'.",
+        )
+
+
+class DuplicateEnumValueError(BlazeError):
+    """Raised when two members of the same Enum resolve to the same value
+    (whether implicit or explicit)"""
+
+    def __init__(self, enum_name: str, member_name: str, value, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Enum '{enum_name}' member '{member_name}' duplicates value {value!r} of an earlier member",
+            line,
+            column,
+            filename,
+            code="BLZ2053",
+            hint=f"Give '{member_name}' a distinct explicit value, e.g. '{member_name} = ...'.",
+        )
+
+
+class EnumValueNotFoundError(RuntimeError):
+    """Raised by ``Enum.fromValue(value)`` when no member of the Enum has
+    the given value"""
+
+    def __init__(self, enum_name: str, value, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"No member of Enum '{enum_name}' has value {value!r}",
+            line,
+            column,
+            filename,
+            code="BLZ2054",
+            hint=build_hint(
+                f"'{value!r}' does not match any member of Enum '{enum_name}'.",
+                fixes=[
+                    f"Check the value against '{enum_name}''s declared members.",
+                    f"Use '{enum_name}.values()' to see all valid members and their values.",
+                ],
+            ),
+        )
+
+
 # --- Custom Attribute Errors ---
 
 class InvalidAttributeSyntaxError(BlazeError):

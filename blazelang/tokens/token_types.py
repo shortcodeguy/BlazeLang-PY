@@ -32,6 +32,7 @@ class TokenType(Enum):
     FUNCTION = auto()
     CLASS = auto()
     STRUCT = auto()
+    ENUM = auto()
     CONSTRUCTOR = auto()
     RETURN = auto()
     BREAK = auto()

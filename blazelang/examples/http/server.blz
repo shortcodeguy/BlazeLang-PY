@@ -1,27 +1,157 @@
 Import HttpServer from "httpserver"
 
-Meta handleRequest(req) {
-    Show("========== REQUEST ==========")
-    Show("Method: " + req.method)
-    Show("Path: " + req.path)
-
+Function hello(req) {
     return {
         status: 200,
-        headers: {
-            ContentType: "application/json"
-        },
         body: {
             success: true,
-            message: "Everything working fine!",
-            server: "BlazeLang HTTP Server",
-            status: "Online",
-            method: req.method,
-            path: req.path,
-            query: req.query,
-            headers: req.headers
+            message: "Hello from BlazeLang!",
+            name: req.query.name,
+            route: "/api/hello"
         }
     }
 }
 
-Show("Starting BlazeLang HTTP Server...")
-HttpServer.listen(8080, handleRequest)
+Function echo(req) {
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: "Echo successful!",
+            received: req.json,
+            route: "/api/echo"
+        }
+    }
+}
+
+Function notesList(req) {
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: "Notes list endpoint",
+            notes: []
+        }
+    }
+}
+
+Function notesCreate(req) {
+    return {
+        status: 201,
+        body: {
+            success: true,
+            message: "Note created successfully!",
+            note: req.json
+        }
+    }
+}
+
+Function oldHello(req) {
+    return HttpServer.redirect("/api/hello", 302)
+}
+
+Function visits(req) {
+    var count = 0
+
+    if (req.session.visits) {
+        count = req.session.visits
+    }
+
+    count = count + 1
+    req.session.visits = count
+
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: "Session visit counter",
+            visits: count
+        }
+    }
+}
+
+Function login(req) {
+    var username = "Blaze"
+
+    if (req.json.username) {
+        username = req.json.username
+    }
+
+    var token = HttpServer.jwt_encode(
+        {
+            username: username,
+            role: "user"
+        },
+        "blazelang-secret"
+    )
+
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: "Login successful!",
+            token: token,
+            username: username
+        }
+    }
+}
+
+Function me(req) {
+    var token = HttpServer.parse_bearer_token(
+        req.headers.Authorization
+    )
+
+    if (!token) {
+        return HttpServer.unauthorized("Bearer token required")
+    }
+
+    var payload = HttpServer.jwt_decode(
+        token,
+        "blazelang-secret"
+    )
+
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: "Authenticated successfully!",
+            user: payload
+        }
+    }
+}
+
+Function forbidden(req) {
+    return HttpServer.forbidden(
+        "You are not allowed to access this route"
+    )
+}
+
+HttpServer.route("/api/hello", ["GET"], hello)
+HttpServer.route("/api/echo", ["POST"], echo)
+HttpServer.route("/api/notes", ["GET"], notesList)
+HttpServer.route("/api/notes", ["POST"], notesCreate)
+HttpServer.route("/api/old-hello", ["GET"], oldHello)
+HttpServer.route("/api/visits", ["GET"], visits)
+HttpServer.route("/api/login", ["POST"], login)
+HttpServer.route("/api/me", ["GET"], me)
+HttpServer.route("/api/error/forbidden", ["GET"], forbidden)
+
+Show("========================================")
+Show("     BlazeLang HTTP Server")
+Show("========================================")
+Show("Server: http://localhost:8080")
+Show("")
+Show("Routes:")
+Show("  GET     /api/hello")
+Show("  POST    /api/echo")
+Show("  GET     /api/notes")
+Show("  POST    /api/notes")
+Show("  GET     /api/old-hello")
+Show("  GET     /api/visits")
+Show("  POST    /api/login")
+Show("  GET     /api/me")
+Show("  GET     /api/error/forbidden")
+Show("")
+Show("Starting server...")
+
+HttpServer.listen(8080, hello)

@@ -349,6 +349,32 @@ class NamedArgument(ASTNode):
     value: Any = None
 
 
+@dataclass
+class EnumMember(ASTNode):
+    """A single member inside an Enum declaration, in declaration order.
+    ``value`` is the unevaluated expression node for an explicit value
+    (e.g. ``= 5`` or ``= "admin"``), or None when the member relies on
+    implicit auto-increment numbering starting from 0."""
+    name: str
+    value: Optional[Any] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    filename: Optional[str] = None
+
+
+@dataclass
+class EnumDeclaration(ASTNode):
+    """Enum declaration: a named, closed set of immutable members. Each
+    member has either an implicit (auto-incrementing integer, starting at
+    0) or explicit int/string value. Independent of the Class/Struct
+    systems -- Enum has no methods, fields, constructors, or inheritance."""
+    name: str
+    members: List[EnumMember] = field(default_factory=list)
+    line: Optional[int] = None
+    column: Optional[int] = None
+    filename: Optional[str] = None
+
+
 # === Custom Attributes ===
 
 @dataclass

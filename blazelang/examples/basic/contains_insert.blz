@@ -1,0 +1,14 @@
+// BlazeLang List: contains(), insert() and clear()
+
+var fruits = ["Apple", "Banana", "Mango"]
+
+Show("Initial:", fruits)
+
+Show("Contains Apple:", fruits.contains("Apple"))
+Show("Contains Orange:", fruits.contains("Orange"))
+
+fruits.insert(1, "Orange")
+Show("After insert:", fruits)
+
+fruits.clear()
+Show("After clear:", fruits)

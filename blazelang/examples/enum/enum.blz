@@ -1,0 +1,189 @@
+// ============================================================
+// BlazeLang v1.8.1
+// Enum Utilities Test
+// ============================================================
+
+Show("========== ENUM UTILITIES TEST ==========")
+
+
+// ============================================================
+// BASIC ENUM
+// ============================================================
+
+Enum Status {
+    Pending
+    Processing
+    Completed
+    Failed
+}
+
+var status = Status.Pending
+
+Show("")
+Show("========== BASIC ENUM ==========")
+
+Show("Status:")
+Show(status)
+
+Show("Name:")
+Show(status.name)
+
+Show("Value:")
+Show(status.value)
+
+
+// ============================================================
+// EXPLICIT VALUES
+// ============================================================
+
+Enum Priority {
+    Low = 1
+    Medium = 2
+    High = 3
+    Critical = 5
+}
+
+Show("")
+Show("========== EXPLICIT VALUES ==========")
+
+Show(Priority.Low)
+Show(Priority.Low.name)
+Show(Priority.Low.value)
+
+Show(Priority.High)
+Show(Priority.High.name)
+Show(Priority.High.value)
+
+Show(Priority.Critical)
+Show(Priority.Critical.name)
+Show(Priority.Critical.value)
+
+
+// ============================================================
+// ENUM VALUES
+// ============================================================
+
+Show("")
+Show("========== ENUM VALUES ==========")
+
+Show(Status.values())
+Show(Priority.values())
+
+
+// ============================================================
+// FROM VALUE
+// ============================================================
+
+Show("")
+Show("========== FROM VALUE ==========")
+
+var completed = Status.fromValue(2)
+
+Show("From value 2:")
+Show(completed)
+
+Show("Name:")
+Show(completed.name)
+
+Show("Value:")
+Show(completed.value)
+
+var critical = Priority.fromValue(5)
+
+Show("From value 5:")
+Show(critical)
+
+Show("Name:")
+Show(critical.name)
+
+Show("Value:")
+Show(critical.value)
+
+
+// ============================================================
+// COMPARISON
+// ============================================================
+
+Show("")
+Show("========== ENUM COMPARISON ==========")
+
+if status == Status.Pending {
+    Show("Status is Pending")
+}
+
+if status != Status.Completed {
+    Show("Status is not Completed")
+}
+
+if Priority.High == Priority.High {
+    Show("Priority comparison works")
+}
+
+
+// ============================================================
+// ENUM IN FUNCTION
+// ============================================================
+
+Function IsCompleted(value) {
+    return value == Status.Completed
+}
+
+Show("")
+Show("========== ENUM FUNCTION ==========")
+
+Show(IsCompleted(Status.Completed))
+Show(IsCompleted(Status.Pending))
+
+
+// ============================================================
+// ENUM IN CLASS
+// ============================================================
+
+Class Task {
+
+    Constructor(name, status) {
+        this.name = name
+        this.status = status
+    }
+
+    Function IsDone() {
+        return this.status == Status.Completed
+    }
+}
+
+Show("")
+Show("========== ENUM + CLASS ==========")
+
+var task = Task("BlazeLang", Status.Completed)
+
+Show(task.name)
+Show(task.status)
+Show(task.status.name)
+Show(task.status.value)
+Show(task.IsDone())
+
+
+// ============================================================
+// ENUM ASSIGNMENT
+// ============================================================
+
+Show("")
+Show("========== ENUM ASSIGNMENT ==========")
+
+var current = Status.Pending
+
+Show(current)
+
+current = Status.Processing
+Show(current)
+
+current = Status.Completed
+Show(current)
+
+
+// ============================================================
+// COMPLETE
+// ============================================================
+
+Show("")
+Show("========== ENUM UTILITIES COMPLETE ==========")

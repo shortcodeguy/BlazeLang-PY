@@ -17,6 +17,9 @@ from blazelang.errors.error_handler import (
     DuplicateAttributeUsageError,
     InvalidAttributeArgumentsError,
     AttributeTargetError,
+    DuplicateEnumMemberError,
+    InvalidEnumMemberError,
+    InvalidEnumValueError,
 )
 from blazelang.ast.ast_nodes import *
 
@@ -218,6 +221,9 @@ class Parser:
 
         if token.type == TokenType.STRUCT:
             return self.parse_struct_declaration()
+
+        if token.type == TokenType.ENUM:
+            return self.parse_enum_declaration()
         
         # Imports and exports
         if token.type == TokenType.IMPORT:
@@ -840,6 +846,67 @@ class Parser:
 
         return self._tag(StructDeclaration(name=name, fields=fields), start_token)
 
+    def parse_enum_declaration(self):
+        """Parse an Enum declaration.
+
+        Enum is an independent, data-only language feature, like Struct: no
+        inheritance, methods, or constructors. A body is a flat list of bare
+        identifiers, one per line, each optionally followed by an explicit
+        `= <int|string literal>` value. Members with no explicit value
+        auto-increment from the previous numeric value, starting at 0.
+        """
+        start_token = self.current_token
+        self.advance()  # Skip Enum
+
+        name_token = self.expect(TokenType.IDENTIFIER)
+        name = name_token.value
+
+        self.expect(TokenType.LBRACE)
+
+        members = []
+        seen_members = set()
+        while self.current_token and self.current_token.type != TokenType.RBRACE:
+            token = self.current_token
+
+            if token.type == TokenType.EOF:
+                raise ParserError(
+                    "Unterminated Enum body, expected '}'",
+                    token.line, token.column,
+                )
+
+            if token.type != TokenType.IDENTIFIER:
+                raise InvalidEnumMemberError(
+                    f"unexpected token '{token.value}' in Enum '{name}'",
+                    token.line, token.column, self.filename,
+                )
+
+            member_token = token
+            member_name = token.value
+            self.advance()  # Skip member name
+
+            value = None
+            if self.match(TokenType.ASSIGN):
+                self.advance()  # Skip =
+                value_token = self.current_token
+                if value_token is None or value_token.type not in (TokenType.INTEGER, TokenType.STRING):
+                    raise InvalidEnumValueError(
+                        name, member_name,
+                        value_token.line if value_token else member_token.line,
+                        value_token.column if value_token else member_token.column,
+                        self.filename,
+                    )
+                value = self.parse_expression()
+
+            if member_name in seen_members:
+                raise DuplicateEnumMemberError(name, member_name, member_token.line, member_token.column, self.filename)
+            seen_members.add(member_name)
+
+            members.append(self._tag(EnumMember(name=member_name, value=value), member_token))
+
+        self.expect(TokenType.RBRACE)
+
+        return self._tag(EnumDeclaration(name=name, members=members), start_token)
+
     def parse_import_statement(self):
         """Parse named, namespace, default, and legacy imports."""
         import_token = self.current_token
@@ -903,8 +970,10 @@ class Parser:
             declaration = self.parse_function_declaration(False)
         elif self.match(TokenType.CLASS):
             declaration = self.parse_class_declaration()
+        elif self.match(TokenType.ENUM):
+            declaration = self.parse_enum_declaration()
         else:
-            raise ParserError("Export must be followed by a variable, function, Meta, or Class declaration",
+            raise ParserError("Export must be followed by a variable, function, Meta, Class, or Enum declaration",
                               self.current_token.line, self.current_token.column)
         return ExportStatement(declaration=declaration, is_default=is_default)
     
