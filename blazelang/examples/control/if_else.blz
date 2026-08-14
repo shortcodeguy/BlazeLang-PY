@@ -1,9 +1,14 @@
-// Choose a message with if / else.
-var age = 18
+var x = 75
 
-if age >= 18 {
-    Show("adult")
+if (x >= 90) {
+    Show("A")
+}
+else if (x >= 80) {
+    Show("B")
+}
+else if (x >= 70) {
+    Show("C")
 }
 else {
-    Show("minor")
+    Show("D")
 }

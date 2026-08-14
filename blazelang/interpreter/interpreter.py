@@ -1803,6 +1803,8 @@ class Interpreter:
             self._import_http(node)
         elif module_name == "httpserver":
             self._import_httpserver(node)
+        elif module_name == "gui":
+            self._import_gui(node)
         elif module_name == 'convert':
             self._import_convert(node)
         else:
@@ -2148,6 +2150,15 @@ class Interpreter:
             node,
             create_httpserver_module(self),
             "httpserver"
+        )
+
+    def _import_gui(self, node):
+        from blazelang.stdlib.Gui import create_gui_module
+
+        self._import_standard_module(
+            node,
+            create_gui_module(self),
+            "gui"
         )
 
     def _import_json(self, node):

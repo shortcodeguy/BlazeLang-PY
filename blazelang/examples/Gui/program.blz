@@ -1,0 +1,569 @@
+Import GUI from "gui"
+
+var app = GUI.Create("BlazeLang Calculator", 420, 620)
+
+var display = GUI.Input("0")
+display.SetStyle({
+    background: "#111827",
+    foreground: "#ffffff",
+    font: 28
+})
+
+var title = GUI.Label("BLAZELANG CALCULATOR")
+title.SetStyle({
+    foreground: "#60a5fa",
+    font: 18
+})
+
+var status = GUI.Label("Ready")
+status.SetStyle({
+    foreground: "#9ca3af",
+    font: 12
+})
+
+var current = "0"
+var first = 0
+var operation = ""
+var waiting = false
+var hasDecimal = false
+
+
+Function Refresh() {
+    display.SetValue(current)
+}
+
+
+Function Clear() {
+    current = "0"
+    first = 0
+    operation = ""
+    waiting = false
+    hasDecimal = false
+    status.SetText("Ready")
+    Refresh()
+}
+
+
+Function Digit0() {
+    if waiting {
+        current = "0"
+        waiting = false
+        hasDecimal = false
+    }
+
+    if current != "0" {
+        current = current + "0"
+    }
+
+    Refresh()
+}
+
+
+Function Digit1() {
+    if waiting {
+        current = "1"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "1"
+        } else {
+            current = current + "1"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit2() {
+    if waiting {
+        current = "2"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "2"
+        } else {
+            current = current + "2"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit3() {
+    if waiting {
+        current = "3"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "3"
+        } else {
+            current = current + "3"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit4() {
+    if waiting {
+        current = "4"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "4"
+        } else {
+            current = current + "4"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit5() {
+    if waiting {
+        current = "5"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "5"
+        } else {
+            current = current + "5"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit6() {
+    if waiting {
+        current = "6"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "6"
+        } else {
+            current = current + "6"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit7() {
+    if waiting {
+        current = "7"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "7"
+        } else {
+            current = current + "7"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit8() {
+    if waiting {
+        current = "8"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "8"
+        } else {
+            current = current + "8"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Digit9() {
+    if waiting {
+        current = "9"
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = "9"
+        } else {
+            current = current + "9"
+        }
+    }
+
+    Refresh()
+}
+
+
+Function Decimal() {
+    if waiting {
+        current = "0."
+        waiting = false
+        hasDecimal = true
+        Refresh()
+        return
+    }
+
+    if hasDecimal == false {
+        current = current + "."
+        hasDecimal = true
+    }
+
+    Refresh()
+}
+
+
+Function Add() {
+    first = Float(current)
+    operation = "+"
+    waiting = true
+    hasDecimal = false
+    status.SetText(String(first) + " +")
+}
+
+
+Function Subtract() {
+    first = Float(current)
+    operation = "-"
+    waiting = true
+    hasDecimal = false
+    status.SetText(String(first) + " -")
+}
+
+
+Function Multiply() {
+    first = Float(current)
+    operation = "*"
+    waiting = true
+    hasDecimal = false
+    status.SetText(String(first) + " ×")
+}
+
+
+Function Divide() {
+    first = Float(current)
+    operation = "/"
+    waiting = true
+    hasDecimal = false
+    status.SetText(String(first) + " ÷")
+}
+
+
+Function Percent() {
+    var value = Float(current)
+    value = value / 100
+    current = String(value)
+    waiting = true
+    Refresh()
+}
+
+
+Function Sign() {
+    var value = Float(current)
+    value = value * -1
+    current = String(value)
+    Refresh()
+}
+
+
+Function Equals() {
+    var second = Float(current)
+    var result = 0
+
+    if operation == "+" {
+        result = first + second
+    }
+
+    if operation == "-" {
+        result = first - second
+    }
+
+    if operation == "*" {
+        result = first * second
+    }
+
+    if operation == "/" {
+        if second == 0 {
+            current = "Error"
+            status.SetText("Cannot divide by zero")
+            waiting = true
+            operation = ""
+            Refresh()
+            return
+        }
+
+        result = first / second
+    }
+
+    current = String(result)
+
+    status.SetText(
+        String(first) + " " +
+        operation + " " +
+        String(second) + " ="
+    )
+
+    operation = ""
+    waiting = true
+    hasDecimal = false
+
+    Refresh()
+}
+
+
+Function Backspace() {
+    if waiting {
+        return
+    }
+
+    if current == "0" {
+        return
+    }
+
+    var result = ""
+    var i = 0
+    var length = len(current)
+
+    while i < length - 1 {
+        result = result + current[i]
+        i = i + 1
+    }
+
+    if result == "" {
+        current = "0"
+    } else {
+        current = result
+    }
+
+    Refresh()
+}
+
+
+Function MakeButton(text, callback, background, foreground) {
+    var button = GUI.Button(text)
+
+    button.SetStyle({
+        background: background,
+        foreground: foreground,
+        font: 20
+    })
+
+    button.OnClick(callback)
+
+    return button
+}
+
+
+app.Add(title)
+app.Add(display)
+app.Add(status)
+
+
+var row1 = GUI.Row()
+
+var clear = MakeButton(
+    "C",
+    Clear,
+    "#dc2626",
+    "#ffffff"
+)
+
+var percent = MakeButton(
+    "%",
+    Percent,
+    "#374151",
+    "#ffffff"
+)
+
+var sign = MakeButton(
+    "+/-",
+    Sign,
+    "#374151",
+    "#ffffff"
+)
+
+var divide = MakeButton(
+    "÷",
+    Divide,
+    "#2563eb",
+    "#ffffff"
+)
+
+row1.Add(clear)
+row1.Add(percent)
+row1.Add(sign)
+row1.Add(divide)
+
+app.Add(row1)
+
+
+var row2 = GUI.Row()
+
+var seven = MakeButton(
+    "7",
+    Digit7,
+    "#1f2937",
+    "#ffffff"
+)
+
+var eight = MakeButton(
+    "8",
+    Digit8,
+    "#1f2937",
+    "#ffffff"
+)
+
+var nine = MakeButton(
+    "9",
+    Digit9,
+    "#1f2937",
+    "#ffffff"
+)
+
+var multiply = MakeButton(
+    "×",
+    Multiply,
+    "#2563eb",
+    "#ffffff"
+)
+
+row2.Add(seven)
+row2.Add(eight)
+row2.Add(nine)
+row2.Add(multiply)
+
+app.Add(row2)
+
+
+var row3 = GUI.Row()
+
+var four = MakeButton(
+    "4",
+    Digit4,
+    "#1f2937",
+    "#ffffff"
+)
+
+var five = MakeButton(
+    "5",
+    Digit5,
+    "#1f2937",
+    "#ffffff"
+)
+
+var six = MakeButton(
+    "6",
+    Digit6,
+    "#1f2937",
+    "#ffffff"
+)
+
+var minus = MakeButton(
+    "−",
+    Subtract,
+    "#2563eb",
+    "#ffffff"
+)
+
+row3.Add(four)
+row3.Add(five)
+row3.Add(six)
+row3.Add(minus)
+
+app.Add(row3)
+
+
+var row4 = GUI.Row()
+
+var one = MakeButton(
+    "1",
+    Digit1,
+    "#1f2937",
+    "#ffffff"
+)
+
+var two = MakeButton(
+    "2",
+    Digit2,
+    "#1f2937",
+    "#ffffff"
+)
+
+var three = MakeButton(
+    "3",
+    Digit3,
+    "#1f2937",
+    "#ffffff"
+)
+
+var plus = MakeButton(
+    "+",
+    Add,
+    "#2563eb",
+    "#ffffff"
+)
+
+row4.Add(one)
+row4.Add(two)
+row4.Add(three)
+row4.Add(plus)
+
+app.Add(row4)
+
+
+var row5 = GUI.Row()
+
+var zero = MakeButton(
+    "0",
+    Digit0,
+    "#1f2937",
+    "#ffffff"
+)
+
+var dot = MakeButton(
+    ".",
+    Decimal,
+    "#1f2937",
+    "#ffffff"
+)
+
+var back = MakeButton(
+    "⌫",
+    Backspace,
+    "#374151",
+    "#ffffff"
+)
+
+var equals = MakeButton(
+    "=",
+    Equals,
+    "#16a34a",
+    "#ffffff"
+)
+
+row5.Add(zero)
+row5.Add(dot)
+row5.Add(back)
+row5.Add(equals)
+
+app.Add(row5)
+
+
+app.Run()

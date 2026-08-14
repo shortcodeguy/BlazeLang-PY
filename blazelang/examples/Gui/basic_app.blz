@@ -1,0 +1,17 @@
+Import GUI from "gui"
+
+Function handleClick() {
+    Show("Button clicked!")
+}
+
+var app = GUI.Create("BlazeLang GUI", 600, 400)
+
+var label = GUI.Label("Welcome to BlazeLang GUI!")
+app.Add(label)
+
+var button = GUI.Button("Click Me")
+button.OnClick(handleClick)
+
+app.Add(button)
+
+app.Run()
