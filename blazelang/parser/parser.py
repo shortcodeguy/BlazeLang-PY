@@ -144,6 +144,9 @@ class Parser:
         if token.type == TokenType.CONSTANT:
             return self.parse_variable_declaration(is_constant=True)
 
+        if token.type == TokenType.BIND:
+            return self.parse_bind_declaration()
+
         # public/private var (and public/private constant) outside of a class
         # body -- e.g. at top level or inside a function/block. Visibility is
         # recorded on the node but only enforced for class fields; elsewhere
@@ -338,6 +341,34 @@ class Parser:
             column=getattr(start_token, 'column', None),
         )
     
+    def parse_bind_declaration(self):
+        """Parse a `bind name = expression` declaration.
+
+        Deliberately kept separate from parse_variable_declaration (rather
+        than bolting a `is_bind` flag onto VariableDeclaration) so `var`,
+        `constant`, and `bind` stay three clearly distinct AST shapes, per
+        the language design -- but it reuses the exact same expression
+        parsing, so a Bind's initializer supports everything a `var`
+        initializer does (literals, lists, objects, calls, ...).
+        """
+        start_token = self.current_token
+        self.advance()  # Skip 'bind' keyword
+
+        name_token = self.expect(TokenType.IDENTIFIER)
+        name = name_token.value
+
+        value = None
+        if self.match(TokenType.ASSIGN):
+            self.advance()  # Skip =
+            value = self.parse_expression()
+
+        return BindDeclaration(
+            name=name,
+            value=value,
+            line=getattr(start_token, 'line', None),
+            column=getattr(start_token, 'column', None),
+        )
+
     def parse_block(self) -> BlockStatement:
         """Parse a block of statements enclosed in braces"""
         self.expect(TokenType.LBRACE)

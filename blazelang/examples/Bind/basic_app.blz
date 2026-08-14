@@ -1,0 +1,94 @@
+// ============================================================
+// BlazeLang Bind Demo App
+// Live Task Dashboard
+// ============================================================
+
+bind totalTasks = 0
+bind completedTasks = 0
+bind pendingTasks = 0
+bind lastAction = "None"
+bind appStatus = "Starting"
+
+// ------------------------------------------------------------
+// Add Task
+// ------------------------------------------------------------
+
+Function addTask() {
+    totalTasks = totalTasks.value + 1
+    pendingTasks = pendingTasks.value + 1
+    lastAction = "Task added"
+}
+
+// ------------------------------------------------------------
+// Complete Task
+// ------------------------------------------------------------
+
+Function completeTask() {
+    if pendingTasks.value > 0 {
+        pendingTasks = pendingTasks.value - 1
+        completedTasks = completedTasks.value + 1
+        lastAction = "Task completed"
+    }
+}
+
+// ------------------------------------------------------------
+// Start Application
+// ------------------------------------------------------------
+
+Function startApp() {
+    appStatus = "Running"
+
+    addTask()
+    addTask()
+    addTask()
+
+    completeTask()
+    completeTask()
+
+    lastAction = "Application initialized"
+}
+
+// ------------------------------------------------------------
+// Run
+// ------------------------------------------------------------
+
+startApp()
+
+Show("========================================================")
+Show("              BLAZELANG TASK APP")
+Show("========================================================")
+
+Show("Status:", appStatus.value)
+Show("Total:", totalTasks.value)
+Show("Completed:", completedTasks.value)
+Show("Pending:", pendingTasks.value)
+Show("Last Action:", lastAction.value)
+
+Show("")
+Show("---------------- BIND STATE ----------------")
+
+Show("Total History:", totalTasks.history)
+Show("Completed History:", completedTasks.history)
+Show("Pending History:", pendingTasks.history)
+
+Show("")
+Show("--------------- BIND STATISTICS -------------")
+
+Show("Total Changes:", totalTasks.changes)
+Show("Completed Changes:", completedTasks.changes)
+Show("Pending Changes:", pendingTasks.changes)
+
+Show("")
+Show("---------------- LAST UPDATE -----------------")
+
+Show("Total Updated:", totalTasks.lastUpdate.time)
+Show("Updated By:", totalTasks.lastUpdate.caller)
+
+Show("")
+Show("--------------- ORIGINAL STATE ---------------")
+
+Show("Original Total:", totalTasks.origin)
+Show("Original Completed:", completedTasks.origin)
+Show("Original Pending:", pendingTasks.origin)
+
+Show("========================================================")

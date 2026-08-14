@@ -44,6 +44,20 @@ class VariableDeclaration(ASTNode):
 
 
 @dataclass
+class BindDeclaration(ASTNode):
+    """`bind` declaration: a self-aware stateful variable, distinct from
+    both `var` (plain mutable) and `constant` (immutable). Reuses ordinary
+    expression parsing for its initializer, exactly like
+    VariableDeclaration -- the runtime is what gives `bind` its extra
+    behavior (value/previous/origin/history/changes/state/lastUpdate),
+    not the AST shape."""
+    name: str
+    value: Optional[Any] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+
+
+@dataclass
 class ExpressionStatement(ASTNode):
     """A statement consisting of a single expression"""
     expression: Any  # Expression node

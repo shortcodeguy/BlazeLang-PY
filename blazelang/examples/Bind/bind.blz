@@ -1,0 +1,17 @@
+bind score = 100
+
+Function bindtesting() {
+    score = 200
+    score = 500
+}
+
+bindtesting()
+
+Show(score.value)
+Show(score.previous)
+Show(score.origin)
+Show(score.history)
+Show(score.changes)
+Show(score.state)
+Show(score.lastUpdate.time)
+Show(score.lastUpdate.caller)

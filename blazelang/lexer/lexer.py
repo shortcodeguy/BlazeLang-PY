@@ -22,6 +22,7 @@ class Lexer:
         self.keywords = {
             'var': TokenType.VAR,
             'constant': TokenType.CONSTANT,
+            'bind': TokenType.BIND,
             'if': TokenType.IF,
             'else': TokenType.ELSE,
             'while': TokenType.WHILE,

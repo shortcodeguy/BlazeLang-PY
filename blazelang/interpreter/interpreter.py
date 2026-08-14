@@ -30,12 +30,18 @@ from blazelang.errors.error_handler import (
     EnumValueNotFoundError,
     ArgumentError,
     ValueError as BlazeValueError,
+    InvalidBindDeclarationError,
+    BindMetadataAccessError,
+    InvalidBindAssignmentError,
+    UnsupportedBindOperationError,
+    InvalidBindStateError,
 )
 from typing import Any, Callable, Dict, List
 import re
 import math
 from pathlib import Path
 import os
+from datetime import datetime
 from difflib import get_close_matches
 from builtins import ValueError as PyValueError
 
@@ -580,6 +586,97 @@ class EnumValue:
         return self.__str__()
 
 
+class LastUpdate:
+    """The `time`/`caller` snapshot of a Bind's most recent actual update.
+    A plain attribute-holding object, deliberately -- BindValue.lastUpdate
+    is read through the interpreter's normal PropertyAccess fallback
+    (`hasattr`/`getattr`), the same path any other runtime object with
+    public attributes already goes through, so no new property-access
+    syntax or mechanism is needed for `score.lastUpdate.time`."""
+    __slots__ = ('time', 'caller')
+
+    def __init__(self, time: str, caller: str):
+        self.time = time
+        self.caller = caller
+
+    def __str__(self):
+        return f"{{time: {self.time}, caller: {self.caller}}}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class BindValue:
+    """Runtime representation of a `bind` value -- a first-class BlazeLang
+    type distinct from a plain variable. A BindValue wraps an underlying
+    value of any existing BlazeLang type (int, string, bool, float, list,
+    object, ...) and, alongside it, maintains its own state: the previous
+    value, the original (origin) value, the full change history, a change
+    counter, a simple lifecycle state, and metadata about its most recent
+    actual update (when, and which function performed it).
+
+    Only Bind values carry this metadata -- normal `var`/`constant`
+    declarations continue to use the existing lightweight
+    {'value', 'constant'} scope entry untouched, so this adds no overhead
+    to ordinary variables.
+    """
+
+    # The set of metadata property names that only exist on a bind. Used
+    # by visit_PropertyAccess to give a Bind-specific error (rather than a
+    # generic "unknown property") when one of these is accessed on
+    # something that isn't a BindValue.
+    METADATA_PROPERTIES = frozenset({
+        'value', 'previous', 'origin', 'history', 'changes', 'state', 'lastUpdate',
+    })
+
+    def __init__(self, initial_value: Any):
+        self.value = initial_value
+        self.previous = initial_value
+        self.origin = initial_value
+        self.history = [initial_value]
+        self.changes = 0
+        self.state = 'initial'
+        self.lastUpdate = None
+
+    @staticmethod
+    def _values_equal(a: Any, b: Any) -> bool:
+        """Same-value detection for Bind updates, reusing BlazeLang's
+        existing value semantics (Python equality for its primitive/list/
+        dict representations) -- with bool/int/float kept distinct from
+        each other, matching how builtin_type already tells them apart."""
+        if isinstance(a, bool) != isinstance(b, bool):
+            return False
+        try:
+            return a == b
+        except Exception:
+            return a is b
+
+    def update(self, new_value: Any, caller: str) -> None:
+        """Apply an assignment to this Bind. A no-op (aside from leaving
+        `value` as-is) when the new value doesn't actually differ from the
+        current one -- previous/origin/history/changes/state/lastUpdate are
+        all left untouched for a same-value assignment."""
+        if not self.history:
+            # Should be unreachable -- __init__ always seeds history with
+            # the origin value. Fail loudly with a BlazeLang error rather
+            # than silently producing an inconsistent history.
+            raise InvalidBindStateError("history is empty; a bind must always have at least its origin value")
+        if self._values_equal(self.value, new_value):
+            return
+        self.previous = self.value
+        self.value = new_value
+        self.history.append(new_value)
+        self.changes += 1
+        self.state = 'changed'
+        self.lastUpdate = LastUpdate(datetime.now().strftime('%H:%M'), caller)
+
+    def __str__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return f"<bind value={self.value!r} state={self.state}>"
+
+
 class Interpreter:
     """Tree-walking interpreter for BlazeLang"""
 
@@ -678,6 +775,37 @@ class Interpreter:
         }
 
         return value
+
+    def visit_BindDeclaration(self, node: BindDeclaration) -> Any:
+        """Create a new Bind. Isolated from visit_VariableDeclaration on
+        purpose -- a Bind's initial creation always seeds `origin`/`history`
+        from scratch and starts in the 'initial' state, which is
+        meaningfully different from a plain var's scope entry."""
+        if not node.name:
+            raise InvalidBindDeclarationError(
+                "a bind needs a name", getattr(node, 'line', None), getattr(node, 'column', None), self.filename
+            )
+        value = self.visit(node.value) if node.value is not None else None
+        bind_value = BindValue(value)
+
+        self.current_scope[node.name] = {
+            'value': bind_value,
+            'constant': False,
+        }
+
+        return bind_value
+
+    def _current_caller_name(self) -> str:
+        """The BlazeLang function currently performing an update, derived
+        from the existing call_stack (see Function.__call__, which pushes
+        "name()" on entry and pops it on exit) -- never a Python function
+        name. Top-level code with no enclosing BlazeLang function call
+        reports as '<global>' rather than crashing or leaking the
+        interpreter's internal "main()" sentinel."""
+        if len(self.call_stack) <= 1:
+            return "<global>"
+        top = self.call_stack[-1]
+        return top[:-2] if top.endswith("()") else top
 
     def visit_ExpressionStatement(self, node: ExpressionStatement) -> Any:
         return self.visit(node.expression)
@@ -1144,6 +1272,36 @@ class Interpreter:
         if target_scope[node.name]['constant']:
             raise ImmutableError(node.name)
 
+        current = target_scope[node.name]['value']
+
+        # A Bind's own metadata (previous/origin/history/changes/state/
+        # lastUpdate) lives entirely inside its BindValue -- ordinary
+        # assignment syntax still works ('score = 200'), but instead of
+        # replacing the scope entry's value outright, it routes through
+        # BindValue.update() so that metadata stays correct. This is the
+        # only place Bind assignment behavior lives; everything else about
+        # scope/assignment above is unchanged for normal variables.
+        if isinstance(current, BindValue):
+            if node.operator == '=':
+                new_value = value
+            elif node.operator == '+=':
+                new_value = current.value + value
+            elif node.operator == '-=':
+                new_value = current.value - value
+            elif node.operator == '*=':
+                new_value = current.value * value
+            elif node.operator == '/=':
+                if value == 0:
+                    raise BlazeZeroDivisionError()
+                new_value = current.value / value
+            else:
+                raise InvalidBindAssignmentError(
+                    node.name, node.operator,
+                    getattr(node, 'line', None), getattr(node, 'column', None), self.filename,
+                )
+            current.update(new_value, self._current_caller_name())
+            return current.value
+
         if node.operator == '=':
             target_scope[node.name]['value'] = value
         elif node.operator == '+=':
@@ -1304,6 +1462,16 @@ class Interpreter:
 
         right = self.visit(node.right)
 
+        # A bind wraps a value -- it isn't itself an operand for
+        # arithmetic/comparison. Give a clear, Bind-specific error pointing
+        # at '.value' rather than letting Python's TypeError fall through
+        # to a generic "Cannot apply operator..." message.
+        if isinstance(left, BindValue) or isinstance(right, BindValue):
+            bind_name = node.left.name if isinstance(left, BindValue) and isinstance(node.left, Identifier) else (
+                node.right.name if isinstance(right, BindValue) and isinstance(node.right, Identifier) else None
+            )
+            raise UnsupportedBindOperationError(node.operator, bind_name)
+
         # String concatenation
         if node.operator == '+':
             if isinstance(left, str) or isinstance(right, str):
@@ -1342,6 +1510,9 @@ class Interpreter:
         operand = self.visit(node.operand)
 
         if node.operator == '-':
+            if isinstance(operand, BindValue):
+                bind_name = node.operand.name if isinstance(node.operand, Identifier) else None
+                raise UnsupportedBindOperationError('-', bind_name)
             return -operand
         elif node.operator in ('not', '!'):
             return not self.is_truthy(operand)
@@ -1566,6 +1737,17 @@ class Interpreter:
         # Check if object has the property as an attribute
         if hasattr(obj, node.property):
             return getattr(obj, node.property)
+
+        # Give a Bind-specific diagnosis when the property being accessed
+        # is bind-only metadata (value/previous/origin/history/changes/
+        # state/lastUpdate) but the target isn't actually a bind -- e.g.
+        # `var score = 100; score.history`. Everything above this already
+        # handles the case where obj really is a BindValue (its metadata
+        # is real Python attributes, caught by the hasattr check just
+        # above), so reaching here with one of these names means the
+        # value genuinely isn't a bind.
+        if node.property in BindValue.METADATA_PROPERTIES:
+            raise BindMetadataAccessError(node.property, type(obj).__name__)
 
         raise PropertyError(node.property, type(obj).__name__)
 
@@ -2068,6 +2250,12 @@ class Interpreter:
         return []
 
     def builtin_type(self, obj) -> str:
+        if isinstance(obj, BindValue):
+            # A Bind's outer runtime type is always 'bind', regardless of
+            # what it currently wraps -- the wrapped value keeps its own
+            # type internally (obj.value), reachable via score.value, and
+            # type(score.value) still reports that original type normally.
+            return 'bind'
         if obj is None:
             return 'Null'
         if isinstance(obj, bool):

@@ -1148,6 +1148,119 @@ class TooManyArgumentsError(RuntimeError):
         )
 
 
+# --- Bind Errors ---
+
+class InvalidBindDeclarationError(RuntimeError):
+    """Raised for a malformed `bind` declaration -- e.g. one whose name
+    could not be parsed, or that reaches the interpreter without a valid
+    target name. Mirrors how normal declaration problems are surfaced,
+    kept separate so Bind-specific declaration issues get their own clear
+    diagnostic rather than a generic Runtime Error."""
+
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Invalid bind declaration: {message}",
+            line,
+            column,
+            filename,
+            code="BLZ2055",
+            hint=build_hint(
+                message,
+                fixes=[
+                    "Check the syntax: bind name = expression",
+                    "Make sure the name is a valid identifier.",
+                ],
+            ),
+        )
+
+
+class BindMetadataAccessError(RuntimeError):
+    """Raised when Bind-only metadata (value, previous, origin, history,
+    changes, state, lastUpdate) is accessed on something that isn't a
+    Bind -- most commonly a plain 'var'/'constant'. Kept distinct from the
+    generic PropertyError so the message can point straight at 'bind' as
+    the fix, instead of a generic 'unknown property' diagnosis."""
+
+    def __init__(self, property_name: str, actual_type: str, line: int = None, column: int = None,
+                 filename: str = None):
+        super().__init__(
+            f"Cannot access bind property '{property_name}' on {actual_type} -- it is not a bind",
+            line,
+            column,
+            filename,
+            code="BLZ2056",
+            hint=build_hint(
+                f"'{property_name}' is metadata that only exists on 'bind' values.",
+                fixes=[
+                    "Declare the variable with 'bind' instead of 'var'/'constant' if you need this metadata.",
+                    f"Remove '.{property_name}' if you only wanted the plain value.",
+                ],
+            ),
+        )
+
+
+class InvalidBindAssignmentError(RuntimeError):
+    """Raised when a bind is assigned to using an operator or form that
+    isn't a supported update (e.g. an unrecognized compound-assignment
+    operator). Ordinary '=', '+=', '-=', '*=', '/=' on a bind are not
+    affected -- this only covers operators outside that supported set."""
+
+    def __init__(self, name: str, operator: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Cannot assign to bind '{name}' using operator '{operator}'",
+            line,
+            column,
+            filename,
+            code="BLZ2057",
+            hint=build_hint(
+                f"'{operator}' is not a supported way to update a bind.",
+                fixes=["Use '=', '+=', '-=', '*=', or '/=' to update a bind."],
+            ),
+        )
+
+
+class UnsupportedBindOperationError(RuntimeError):
+    """Raised when a bind value itself (rather than its .value) is used
+    directly in an operation that isn't meaningful on the bind wrapper,
+    e.g. arithmetic or comparison performed on the bind rather than on
+    its underlying value."""
+
+    def __init__(self, operator: str, name: str = None, line: int = None, column: int = None,
+                 filename: str = None):
+        where = f" on bind '{name}'" if name else " on a bind"
+        super().__init__(
+            f"Cannot use operator '{operator}'{where} directly",
+            line,
+            column,
+            filename,
+            code="BLZ2058",
+            hint=build_hint(
+                "A bind wraps a value -- operators need the underlying value, not the bind itself.",
+                fixes=[
+                    f"Use '.value' to reach the underlying value, e.g. {name + '.value' if name else 'myBind.value'}.",
+                ],
+            ),
+        )
+
+
+class InvalidBindStateError(RuntimeError):
+    """Defensive error for an internally inconsistent Bind -- e.g. metadata
+    that failed to line up (empty history, a state outside the known set).
+    This should never be reachable through normal BlazeLang programs; it
+    exists so a corrupted Bind fails loudly with a BlazeLang error instead
+    of leaking a raw Python exception or silently producing wrong data."""
+
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Invalid internal bind state: {message}",
+            line,
+            column,
+            filename,
+            code="BLZ2059",
+            hint="This indicates an internal inconsistency in a bind value rather than a mistake in your code.",
+        )
+
+
 # --- System & Module Errors ---
 
 class ImportError(BlazeError):

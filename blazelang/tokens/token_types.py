@@ -23,6 +23,7 @@ class TokenType(Enum):
     # Keywords
     VAR = auto()
     CONSTANT = auto()
+    BIND = auto()
     IF = auto()
     ELSE = auto()
     WHILE = auto()
