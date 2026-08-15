@@ -35,9 +35,18 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BlazeLanguageService = void 0;
 const vscode = __importStar(require("vscode"));
-const declaration = /\b(var|constant|Function|Meta|Class)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+const declaration = /\b(var|constant|bind|Function|Meta|Class|Struct|Enum)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 const importPattern = /^\s*Import\s+(?:(\w+)\s+from\s+|\*\s+as\s+(\w+)\s+from\s+|\{([^}]+)\}\s+from\s+)?["']?([^"'\s]+)["']?/;
-const keywords = new Set(['var', 'constant', 'Function', 'Meta', 'Class', 'Constructor', 'if', 'else', 'while', 'for', 'in', 'return', 'Break', 'Continue', 'Import', 'Export', 'Default', 'from', 'as', 'try', 'catch', 'finally', 'throw', 'static', 'public', 'private', 'this', 'super', 'and', 'or', 'not', 'true', 'false', 'null']);
+const keywords = new Set(['var', 'constant', 'bind', 'Function', 'Meta', 'Class', 'Struct', 'Enum', 'Constructor', 'if', 'else', 'while', 'for', 'in', 'return', 'Break', 'Continue', 'Import', 'Export', 'Default', 'from', 'as', 'try', 'catch', 'finally', 'throw', 'static', 'async', 'await', 'public', 'private', 'protected', 'override', 'this', 'super', 'and', 'or', 'not', 'true', 'false', 'null']);
+
+// Recognized Meta hooks and Bind properties, used for completion/hover so we
+// never invent APIs that BlazeLang doesn't actually support.
+const metaHooks = ['OnCall', 'Before', 'OnReturn', 'After', 'OnError'];
+const bindProperties = ['value', 'previous', 'history', 'changes'];
+
+// Matches a custom attribute: @name or @name(args...). Args are captured as
+// raw text (not parsed further) purely to report their count.
+const attributePattern = /@([A-Za-z_][A-Za-z0-9_]*)\s*(\()?/g;
 
 class BlazeLanguageService {
     cache = new Map();
@@ -50,6 +59,7 @@ class BlazeLanguageService {
         const symbols = [];
         const imports = new Map();
         const diagnostics = [];
+        const attributes = [];
         const braces = [];
         let blockComment = false;
 
@@ -71,6 +81,7 @@ class BlazeLanguageService {
             const structuralCode = this.maskStrings(code);
 
             this.validateLine(structuralCode, lineNo, diagnostics);
+            this.scanAttributes(code, structuralCode, lineNo, attributes, diagnostics);
 
             // Walk declarations and braces on this line together, in
             // left-to-right column order, so a scope-introducing `{` that
@@ -170,16 +181,97 @@ class BlazeLanguageService {
             diagnostics.push(diag);
         }
 
-        const result = Object.assign({ symbols, imports, diagnostics }, { version: document.version });
+        const result = Object.assign({ symbols, imports, diagnostics, attributes }, { version: document.version });
         this.cache.set(document.uri.toString(), result);
         return result;
     }
 
     clear() { this.cache.clear(); }
     symbols(document) { return this.analyze(document).symbols; }
+    attributes(document) { return this.analyze(document).attributes; }
     wordRange(document, position) { return document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/); }
     isKeyword(word) { return keywords.has(word); }
-    symbolKind(word) { return { var: 'variable', constant: 'constant', Function: 'function', Meta: 'meta', Class: 'class' }[word] ?? 'variable'; }
+    symbolKind(word) { return { var: 'variable', constant: 'constant', bind: 'variable', Function: 'function', Meta: 'meta', Class: 'class', Struct: 'struct', Enum: 'enum' }[word] ?? 'variable'; }
+
+    /** Find the custom attribute (if any) covering `position`, for hover/completion. */
+    attributeAt(document, position) {
+        return this.attributes(document).find(attribute => attribute.range.contains(position));
+    }
+
+    /**
+     * Scan a line for `@name` / `@name(args)` custom attributes. Reports
+     * malformed attributes (e.g. an unclosed argument list) without ever
+     * treating an unrecognized attribute name as an error -- BlazeLang lets
+     * user code declare its own attributes freely.
+     */
+    scanAttributes(code, structuralCode, lineNo, attributes, diagnostics) {
+        attributePattern.lastIndex = 0;
+        for (let match = attributePattern.exec(code); match; match = attributePattern.exec(code)) {
+            const name = match[1];
+            const nameStart = match.index + 1; // skip '@'
+            let argCount;
+            let malformed = false;
+
+            if (match[2] === '(') {
+                const openIndex = match.index + match[0].length - 1;
+                const closeIndex = this.findMatchingParen(structuralCode, openIndex);
+                if (closeIndex === -1) {
+                    malformed = true;
+                    diagnostics.push(this.diagnostic(lineNo, openIndex, 1, 'BLZ1010', `Invalid attribute syntax: missing closing parenthesis for '@${name}('`, vscode.DiagnosticSeverity.Error));
+                    argCount = undefined;
+                }
+                else {
+                    const rawArgs = code.slice(openIndex + 1, closeIndex).trim();
+                    argCount = rawArgs ? this.splitArgs(rawArgs).length : 0;
+                    // Advance the shared regex past the closing paren so we
+                    // don't re-match nested '(' characters inside the args.
+                    attributePattern.lastIndex = closeIndex + 1;
+                }
+            }
+            else {
+                argCount = 0;
+            }
+
+            const range = new vscode.Range(lineNo, match.index, lineNo, nameStart + name.length);
+            attributes.push({ name, argCount, malformed, range });
+        }
+    }
+
+    /** Find the index of the ')' matching the '(' at `openIndex`, or -1. */
+    findMatchingParen(structuralCode, openIndex) {
+        let depth = 0;
+        for (let i = openIndex; i < structuralCode.length; i += 1) {
+            if (structuralCode[i] === '(')
+                depth += 1;
+            else if (structuralCode[i] === ')') {
+                depth -= 1;
+                if (depth === 0)
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    splitArgs(text) {
+        const parts = [];
+        let depth = 0;
+        let current = '';
+        for (const char of text) {
+            if (char === '(' || char === '[')
+                depth += 1;
+            if (char === ')' || char === ']')
+                depth -= 1;
+            if (char === ',' && depth === 0) {
+                parts.push(current.trim());
+                current = '';
+            }
+            else
+                current += char;
+        }
+        if (current.trim())
+            parts.push(current.trim());
+        return parts;
+    }
 
     diagnostic(line, start, length, code, message, severity = vscode.DiagnosticSeverity.Error) {
         // Enforce a minimum underline span of 1 character to guarantee VS Code renders it

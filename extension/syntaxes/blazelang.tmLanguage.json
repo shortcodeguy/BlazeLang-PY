@@ -10,6 +10,9 @@
       "include": "#strings"
     },
     {
+      "include": "#attributes"
+    },
+    {
       "include": "#declarations"
     },
     {
@@ -80,16 +83,42 @@
         }
       ]
     },
+    "attributes": {
+      "patterns": [
+        {
+          "match": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.attribute.blazelang"
+            },
+            "2": {
+              "name": "entity.other.attribute-name.blazelang"
+            }
+          }
+        }
+      ]
+    },
     "declarations": {
       "patterns": [
         {
-          "match": "\\b(Class)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(Class|Struct|Enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.type.class.blazelang"
             },
             "2": {
               "name": "entity.name.type.class.blazelang"
+            }
+          }
+        },
+        {
+          "match": "\\b(bind)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.blazelang"
+            },
+            "2": {
+              "name": "variable.other.readwrite.blazelang"
             }
           }
         },
@@ -136,12 +165,16 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(if|else|while|for|in|return|Break|Continue|try|catch|finally|throw|static|public|private|this|super)\\b",
+          "match": "\\b(if|else|while|for|in|return|Break|Continue|try|catch|finally|throw|static|async|await|public|private|protected|override|this|super)\\b",
           "name": "keyword.control.blazelang"
         },
         {
           "match": "\\b(and|or|not)\\b",
           "name": "keyword.operator.logical.blazelang"
+        },
+        {
+          "match": "\\b(OnCall|Before|OnReturn|After|OnError)\\b",
+          "name": "support.function.meta-hook.blazelang"
         }
       ]
     },

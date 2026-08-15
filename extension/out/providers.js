@@ -44,15 +44,52 @@ const vscode = __importStar(require("vscode"));
 const builtins = {
     Show: 'Show(value, ...) — print values followed by a newline.', Print: 'Print(value, ...) — print values without a newline.', Input: 'Input(prompt) — read a line of terminal input.', len: 'len(value) — return collection or string length.', range: 'range(stop), range(start, stop), range(start, stop, step) — create an array of numbers.', type: 'type(value) — return a BlazeLang type name.', Int: 'Int(value) — convert to integer.', Float: 'Float(value) — convert to float.', String: 'String(value) — convert to string.', Bool: 'Bool(value) — convert to boolean.',
 };
-const keywords = { var: 'Declare a mutable variable.', constant: 'Declare an immutable variable.', Function: 'Declare a value-returning function.', Meta: 'Declare a no-return routine.', Class: 'Declare a class.', Import: 'Import a built-in or local module.', Export: 'Export a declaration from a module.', try: 'Start error-handling block.', throw: 'Raise a runtime error.' };
-const standardModules = ['math', 'random', 'date', 'time', 'path', 'system', 'env', 'file', 'http', 'json'];
+const keywords = { var: 'Declare a mutable variable.', constant: 'Declare an immutable variable.', bind: 'Declare a reactive bound variable.', Function: 'Declare a value-returning function.', Meta: 'Declare a no-return routine.', Class: 'Declare a class.', Struct: 'Declare a struct.', Enum: 'Declare an enum.', Import: 'Import a built-in or local module.', Export: 'Export a declaration from a module.', try: 'Start error-handling block.', throw: 'Raise a runtime error.' };
+const standardModules = ['Math', 'Random', 'Date', 'Time', 'Path', 'System', 'Env', 'File', 'Http', 'Json', 'GUI', 'HttpServer', 'Convert'];
+const metaHooks = { OnCall: 'Meta hook invoked when the target function is called.', Before: 'Meta hook invoked before the target function body runs.', OnReturn: 'Meta hook invoked with the return value of the target function.', After: 'Meta hook invoked after the target function body runs.', OnError: 'Meta hook invoked when the target function throws.' };
+const bindProperties = { value: 'Current value of the bound variable.', previous: 'Value of the bound variable before its last change.', history: 'List of all previous values of the bound variable.', changes: 'Number of times the bound variable has changed.' };
+// Attributes BlazeLang code commonly declares/uses. This is a starting set
+// for completion only -- any other @name is still valid, just unrecognized.
+const knownAttributes = { logged: 'Logs each call to the attached function.', role: 'Restricts access to the attached function to a given role.', service: 'Associates the attached function/class with a named service.' };
 function completionProvider(service) {
     return { provideCompletionItems(document, position) {
+            const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
+
+            // Right after '@': only offer known attributes, not every keyword/builtin.
+            if (/@[A-Za-z_]*$/.test(linePrefix)) {
+                return Object.entries(knownAttributes).map(([name, detail]) => {
+                    const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Property);
+                    item.detail = `Attribute — ${detail}`;
+                    item.insertText = name;
+                    return item;
+                });
+            }
+
+            // Right after a bound variable's '.': only offer Bind properties
+            // actually supported by the runtime -- never invented ones.
+            const dotMatch = /([A-Za-z_][A-Za-z0-9_]*)\.\s*[A-Za-z_]*$/.exec(linePrefix);
+            if (dotMatch) {
+                const symbol = service.symbols(document).find(s => s.name === dotMatch[1]);
+                if (symbol && symbol.detail && symbol.detail.startsWith('bind ')) {
+                    return Object.entries(bindProperties).map(([name, detail]) => {
+                        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Property);
+                        item.detail = detail;
+                        return item;
+                    });
+                }
+            }
+
             const range = document.getWordRangeAtPosition(position);
             const items = [];
             for (const [name, detail] of Object.entries({ ...keywords, ...builtins })) {
                 const item = new vscode.CompletionItem(name, name in builtins ? vscode.CompletionItemKind.Function : vscode.CompletionItemKind.Keyword);
                 item.detail = detail;
+                item.range = range;
+                items.push(item);
+            }
+            for (const [name, detail] of Object.entries(metaHooks)) {
+                const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Event);
+                item.detail = `Meta hook — ${detail}`;
                 item.range = range;
                 items.push(item);
             }
@@ -72,13 +109,36 @@ function completionProvider(service) {
         } };
 }
 function hoverProvider(service) {
-    return { provideHover(document, position) { const range = service.wordRange(document, position); if (!range)
-            return; const word = document.getText(range); const symbol = service.symbols(document).find(item => item.name === word); const detail = builtins[word] ?? keywords[word] ?? (symbol ? `${symbol.detail}\n\nDeclared at line ${symbol.range.start.line + 1}.` : undefined); return detail ? new vscode.Hover(new vscode.MarkdownString(`**${word}**\n\n${detail}`), range) : undefined; } };
+    return { provideHover(document, position) {
+            const attribute = service.attributeAt(document, position);
+            if (attribute) {
+                const known = knownAttributes[attribute.name];
+                const lines = [
+                    'BlazeLang Attribute',
+                    '',
+                    `Name: ${attribute.name}`,
+                    `Arguments: ${attribute.argCount ?? 'unknown'}`,
+                    '',
+                    known ? known : 'Custom attribute'
+                ];
+                return new vscode.Hover(new vscode.MarkdownString('```\n' + lines.join('\n') + '\n```'), attribute.range);
+            }
+
+            const range = service.wordRange(document, position);
+            if (!range)
+                return;
+            const word = document.getText(range);
+            if (metaHooks[word])
+                return new vscode.Hover(new vscode.MarkdownString(`**${word}**\n\nMeta hook — ${metaHooks[word]}`), range);
+            const symbol = service.symbols(document).find(item => item.name === word);
+            const detail = builtins[word] ?? keywords[word] ?? (symbol ? `${symbol.detail}\n\nDeclared at line ${symbol.range.start.line + 1}.` : undefined);
+            return detail ? new vscode.Hover(new vscode.MarkdownString(`**${word}**\n\n${detail}`), range) : undefined;
+        } };
 }
 function semanticProvider() {
     const legend = new vscode.SemanticTokensLegend(['keyword', 'class', 'function', 'method', 'variable', 'parameter', 'property', 'string', 'number', 'comment']);
     const token = { keyword: 0, class: 1, function: 2, variable: 4, comment: 9 };
-    return [{ provideDocumentSemanticTokens(document) { const builder = new vscode.SemanticTokensBuilder(legend); const declaration = /\b(Class|Function|Meta|var|constant)\s+([A-Za-z_]\w*)/g; for (let line = 0; line < document.lineCount; line += 1) {
+    return [{ provideDocumentSemanticTokens(document) { const builder = new vscode.SemanticTokensBuilder(legend); const declaration = /\b(Class|Struct|Enum|Function|Meta|var|constant|bind)\s+([A-Za-z_]\w*)/g; for (let line = 0; line < document.lineCount; line += 1) {
                 const text = document.lineAt(line).text;
                 const comment = text.indexOf('//');
                 if (comment >= 0)
@@ -86,7 +146,7 @@ function semanticProvider() {
                 declaration.lastIndex = 0;
                 for (let m = declaration.exec(text); m; m = declaration.exec(text)) {
                     builder.push(line, m.index, m[1].length, token.keyword);
-                    builder.push(line, m.index + m[0].lastIndexOf(m[2]), m[2].length, m[1] === 'Class' ? token.class : (m[1] === 'var' || m[1] === 'constant' ? token.variable : token.function));
+                    builder.push(line, m.index + m[0].lastIndexOf(m[2]), m[2].length, (m[1] === 'Class' || m[1] === 'Struct' || m[1] === 'Enum') ? token.class : ((m[1] === 'var' || m[1] === 'constant' || m[1] === 'bind') ? token.variable : token.function));
                 }
             } return builder.build(); } }, legend];
 }
@@ -126,7 +186,7 @@ function codeActions() { return { provideCodeActions(document, _range, context) 
             actions.push(action);
         }
     } return actions; } }; }
-function kindFor(symbol) { return { class: vscode.SymbolKind.Class, function: vscode.SymbolKind.Function, meta: vscode.SymbolKind.Method, constant: vscode.SymbolKind.Constant, import: vscode.SymbolKind.Module, variable: vscode.SymbolKind.Variable, parameter: vscode.SymbolKind.Variable }[symbol.kind]; }
-function completionKindFor(symbol) { return { class: vscode.CompletionItemKind.Class, function: vscode.CompletionItemKind.Function, meta: vscode.CompletionItemKind.Method, constant: vscode.CompletionItemKind.Constant, import: vscode.CompletionItemKind.Module, variable: vscode.CompletionItemKind.Variable, parameter: vscode.CompletionItemKind.Variable }[symbol.kind]; }
+function kindFor(symbol) { return { class: vscode.SymbolKind.Class, struct: vscode.SymbolKind.Struct, enum: vscode.SymbolKind.Enum, function: vscode.SymbolKind.Function, meta: vscode.SymbolKind.Method, constant: vscode.SymbolKind.Constant, import: vscode.SymbolKind.Module, variable: vscode.SymbolKind.Variable, parameter: vscode.SymbolKind.Variable }[symbol.kind]; }
+function completionKindFor(symbol) { return { class: vscode.CompletionItemKind.Class, struct: vscode.CompletionItemKind.Struct, enum: vscode.CompletionItemKind.Enum, function: vscode.CompletionItemKind.Function, meta: vscode.CompletionItemKind.Method, constant: vscode.CompletionItemKind.Constant, import: vscode.CompletionItemKind.Module, variable: vscode.CompletionItemKind.Variable, parameter: vscode.CompletionItemKind.Variable }[symbol.kind]; }
 function escape(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 //# sourceMappingURL=providers.js.map
