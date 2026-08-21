@@ -1,6 +1,311 @@
 Import Http from "http"
-// This uses a public test endpoint. Network access is required to run it.
-var response = Http.Get("https://jsonplaceholder.typicode.com/todos/1")
+
+// ========================================
+// BlazeLang HTTP Module
+// Easy examples for beginners
+// ========================================
+
+
+// ----------------------------------------
+// 1. GET REQUEST
+// GET is used to get data from a website/API.
+// ----------------------------------------
+
+var response = Http.Get(
+    "https://jsonplaceholder.typicode.com/todos/1"
+)
+
+Show("GET Request")
 Show(response.status)
 Show(response.ok)
 Show(response.body)
+
+
+// ----------------------------------------
+// 2. GET WITH QUERY
+// Query parameters are extra values in a URL.
+// Example: ?userId=1
+// ----------------------------------------
+
+var users = Http.Get(
+    "https://jsonplaceholder.typicode.com/todos",
+    {
+        query: {
+            userId: 1
+        }
+    }
+)
+
+Show("GET with Query")
+Show(users.status)
+Show(users.body)
+
+
+// ----------------------------------------
+// 3. POST REQUEST
+// POST is used to send new data to a server.
+// ----------------------------------------
+
+var post = Http.Post(
+    "https://jsonplaceholder.typicode.com/posts",
+    {
+        title: "Hello BlazeLang",
+        body: "My first HTTP request!",
+        userId: 1
+    }
+)
+
+Show("POST Request")
+Show(post.status)
+Show(post.ok)
+Show(post.body)
+
+
+// ----------------------------------------
+// 4. PUT REQUEST
+// PUT is used to replace/update existing data.
+// ----------------------------------------
+
+var put = Http.Put(
+    "https://jsonplaceholder.typicode.com/posts/1",
+    {
+        title: "Updated Title",
+        body: "Updated from BlazeLang",
+        userId: 1
+    }
+)
+
+Show("PUT Request")
+Show(put.status)
+Show(put.ok)
+Show(put.body)
+
+
+// ----------------------------------------
+// 5. PATCH REQUEST
+// PATCH updates only some fields.
+// ----------------------------------------
+
+var patch = Http.Patch(
+    "https://jsonplaceholder.typicode.com/posts/1",
+    {
+        title: "New Title"
+    }
+)
+
+Show("PATCH Request")
+Show(patch.status)
+Show(patch.ok)
+Show(patch.body)
+
+
+// ----------------------------------------
+// 6. DELETE REQUEST
+// DELETE removes data from a server.
+// ----------------------------------------
+
+var deleted = Http.Delete(
+    "https://jsonplaceholder.typicode.com/posts/1"
+)
+
+Show("DELETE Request")
+Show(deleted.status)
+Show(deleted.ok)
+
+
+// ----------------------------------------
+// 7. HEAD REQUEST
+// HEAD gets response information without
+// downloading the normal response body.
+// ----------------------------------------
+
+var head = Http.Head(
+    "https://jsonplaceholder.typicode.com/todos/1"
+)
+
+Show("HEAD Request")
+Show(head.status)
+Show(head.ok)
+Show(head.headers)
+
+
+// ----------------------------------------
+// 8. OPTIONS REQUEST
+// OPTIONS asks the server which HTTP methods
+// or options are supported.
+// ----------------------------------------
+
+var options = Http.Options(
+    "https://example.com"
+)
+
+Show("OPTIONS Request")
+Show(options.status)
+Show(options.ok)
+
+
+// ----------------------------------------
+// 9. CUSTOM HEADERS
+// Headers send extra information to a server.
+// ----------------------------------------
+
+var headers = Http.Get(
+    "https://jsonplaceholder.typicode.com/todos/1",
+    {
+        headers: {
+            Accept: "application/json",
+            UserAgent: "BlazeLang/1.0"
+        }
+    }
+)
+
+Show("Custom Headers")
+Show(headers.status)
+Show(headers.body)
+
+
+// ----------------------------------------
+// 10. AUTHORIZATION
+// Authorization is commonly used with APIs
+// that require a login/token.
+// ----------------------------------------
+
+var auth = Http.Get(
+    "https://example.com",
+    {
+        authorization: "Bearer YOUR_TOKEN"
+    }
+)
+
+Show("Authorization")
+Show(auth.status)
+Show(auth.ok)
+
+
+// ----------------------------------------
+// 11. API KEY
+// Some APIs use an API key for authentication.
+// ----------------------------------------
+
+var api = Http.Get(
+    "https://example.com",
+    {
+        apiKey: "YOUR_API_KEY"
+    }
+)
+
+Show("API Key")
+Show(api.status)
+Show(api.ok)
+
+
+// ----------------------------------------
+// 12. CONTENT TYPE
+// Content-Type tells the server what kind
+// of data we are sending.
+// ----------------------------------------
+
+var jsonResponse = Http.Post(
+    "https://jsonplaceholder.typicode.com/posts",
+
+    {
+        title: "BlazeLang",
+        body: "Sending JSON",
+        userId: 1
+    },
+
+    {
+        contentType: "application/json",
+        accept: "application/json"
+    }
+)
+
+Show("JSON Request")
+Show(jsonResponse.status)
+Show(jsonResponse.body)
+
+
+// ----------------------------------------
+// 13. TIMEOUT
+// timeout is the maximum time to wait
+// for a request, in milliseconds.
+// 10000 = 10 seconds.
+// ----------------------------------------
+
+var timed = Http.Get(
+    "https://jsonplaceholder.typicode.com/todos/1",
+    {
+        timeout: 10000
+    }
+)
+
+Show("Timeout Example")
+Show(timed.status)
+Show(timed.ok)
+
+
+// ----------------------------------------
+// 14. ERROR HANDLING
+// HTTP errors do not crash the program.
+// You can check response.ok and response.error.
+// ----------------------------------------
+
+var error = Http.Get(
+    "https://jsonplaceholder.typicode.com/invalid"
+)
+
+Show("Error Example")
+Show(error.status)
+Show(error.ok)
+Show(error.error)
+
+
+// ----------------------------------------
+// 15. DOWNLOAD
+// Download data from a URL and save it
+// to a file.
+// ----------------------------------------
+
+var download = Http.Download(
+    "https://jsonplaceholder.typicode.com/todos/1",
+    "downloads/todo.json"
+)
+
+Show("Download")
+Show(download.status)
+Show(download.ok)
+Show(download.path)
+
+
+// ----------------------------------------
+// RESPONSE PROPERTIES
+//
+// status      = HTTP status code
+// statusText  = status message
+// ok          = true when request succeeded
+// body        = response data
+// headers     = response headers
+// url         = final URL
+// method      = HTTP method
+// error       = error message
+// ----------------------------------------
+
+Show("Response Information")
+Show(response.status)
+Show(response.statusText)
+Show(response.ok)
+Show(response.body)
+Show(response.headers)
+Show(response.url)
+Show(response.method)
+Show(response.error)
+
+
+// ========================================
+// HTTP MODULE TEST FINISHED
+// ========================================
+
+Show("")
+Show("========================================")
+Show("       HTTP Examples Completed")
+Show("========================================")

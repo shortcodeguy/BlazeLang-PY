@@ -1,1 +1,0 @@
-Export Default Class User { Constructor(name) { this.name = name } }

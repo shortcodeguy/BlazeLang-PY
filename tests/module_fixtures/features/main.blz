@@ -1,5 +1,0 @@
-Import { add as sum, PI } from "utils/math.blz"
-Import * as Math from "utils/math.blz"
-Import User from "models/user.blz"
-var total = sum(2, 3) + Math.add(1, 1) + PI
-var user = User("Rohit")

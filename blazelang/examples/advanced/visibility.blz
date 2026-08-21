@@ -1,22 +1,22 @@
 Class Account {
-private var balance = 0
+    private var balance = 0
 
-Constructor(owner) {
-    this.owner = owner
-}
+    Constructor(owner) {
+        this.owner = owner
+    }
 
-public Function Deposit(amount) {
-    this.balance += amount
-    return this.balance
-}
+    public Function Deposit(amount) {
+        this.balance += amount
+        return this.balance
+    }
 
-private Function InternalMessage() {
-    return "account is valid"
-}
+    private Function InternalMessage() {
+        return "account is valid"
+    }
 
-public Function Status() {
-    return this.owner + ": " + this.InternalMessage()
-}
+    public Function Status() {
+        return this.owner + ": " + this.InternalMessage()
+    }
 
 }
 

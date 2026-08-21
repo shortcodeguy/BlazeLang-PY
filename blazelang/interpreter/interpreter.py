@@ -35,6 +35,7 @@ from blazelang.errors.error_handler import (
     InvalidBindAssignmentError,
     UnsupportedBindOperationError,
     InvalidBindStateError,
+    InvalidAwaitError,
 )
 from typing import Any, Callable, Dict, List
 import re
@@ -60,6 +61,39 @@ class BreakException(Exception):
 class ContinueException(Exception):
     """Exception to handle continue statements"""
     pass
+
+
+class BlazeFuture:
+    """The Promise/Future-like runtime value returned by calling an
+    'async Function'.
+
+    BlazeLang has no real event loop or scheduler, so async functions run
+    eagerly (synchronously, to completion) the moment they're called --
+    exactly like a normal function -- except their outcome (result or
+    raised error) is captured here instead of being returned/raised
+    directly. 'await' is what actually surfaces that outcome: unwrapping
+    the value on success, or re-raising the original error on failure.
+    This keeps 'async'/'await' fully deterministic and composable with the
+    rest of the tree-walking interpreter (recursion, arguments, etc.) with
+    no additional runtime machinery.
+    """
+
+    def __init__(self, value: Any = None, error: BaseException = None):
+        self.value = value
+        self.error = error
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.error is not None
+
+    def __str__(self):
+        return "<Future rejected>" if self.is_rejected else f"<Future {self._preview()}>"
+
+    def _preview(self):
+        return self.value
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class AttributeHolder:
@@ -93,11 +127,15 @@ class Function(AttributeHolder):
     def __init__(self, name: str, parameters: List[str], body: BlockStatement,
                  is_meta: bool = False, closure: Dict = None,
                  owner_class=None, access_modifier: str = 'public',
-                 attributes: Dict[str, list] = None):
+                 attributes: Dict[str, list] = None, is_async: bool = False):
         self.name = name
         self.parameters = parameters
         self.body = body
         self.is_meta = is_meta
+        # Async functions still execute eagerly (see BlazeFuture) -- this
+        # flag only changes what __call__ hands back: a BlazeFuture wrapping
+        # the outcome instead of the outcome itself.
+        self.is_async = is_async
         self.closure = closure or {}
         self.is_method = False
         self.owner_class = owner_class          # Class this method belongs to (or None for free functions)
@@ -178,6 +216,12 @@ class Function(AttributeHolder):
             except Exception as error:
                 if hooks:
                     run_hook('OnError', [method_token, str(error)])
+                # An async function's body failing doesn't raise out of the
+                # call itself -- like a rejected Promise, the error is
+                # captured on the Future and only surfaces when something
+                # 'await's it (see visit_AwaitExpression).
+                if self.is_async:
+                    return BlazeFuture(error=error)
                 raise
             if hooks:
                 run_hook('OnReturn', [method_token, result])
@@ -186,6 +230,8 @@ class Function(AttributeHolder):
             # return a value (HTTP handlers rely on that established form).
             if self.is_meta and not returned_explicitly:
                 return None
+            if self.is_async:
+                return BlazeFuture(value=result)
             return result
         finally:
             interpreter.call_stack.pop()
@@ -964,6 +1010,7 @@ class Interpreter:
             is_meta=node.is_meta,
             closure=dict(self.current_scope),
             attributes=self._eval_attributes(getattr(node, 'attributes', None)),
+            is_async=getattr(node, 'is_async', False),
         )
 
         self.current_scope[node.name] = {
@@ -1518,6 +1565,25 @@ class Interpreter:
             return not self.is_truthy(operand)
 
         raise BlazeRuntimeError(f"Unknown unary operator '{node.operator}'")
+
+    def visit_AwaitExpression(self, node) -> Any:
+        """Resolve a BlazeFuture: return its value on success, or re-raise
+        the original error it captured (a rejected Promise/Future). Awaiting
+        anything else is a usage error -- 'await' only makes sense on the
+        outcome of calling an 'async Function'."""
+        value = self.visit(node.value)
+
+        if isinstance(value, BlazeFuture):
+            if value.is_rejected:
+                raise value.error
+            return value.value
+
+        raise InvalidAwaitError(
+            actual_type=self.builtin_type(value),
+            line=getattr(node, 'line', None),
+            column=getattr(node, 'column', None),
+            filename=self.filename,
+        )
 
     def visit_FunctionCall(self, node: FunctionCall) -> Any:
         callee = self.visit(node.callee)
@@ -2261,6 +2327,8 @@ class Interpreter:
         return []
 
     def builtin_type(self, obj) -> str:
+        if isinstance(obj, BlazeFuture):
+            return 'Future'
         if isinstance(obj, BindValue):
             # A Bind's outer runtime type is always 'bind', regardless of
             # what it currently wraps -- the wrapped value keeps its own

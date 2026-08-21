@@ -218,6 +218,13 @@ class Parser:
         
         if token.type == TokenType.FUNCTION:
             return self.parse_function_declaration(is_meta=False)
+
+        # 'async Function name(...) { ... }' -- 'async' is only meaningful
+        # directly in front of a Function declaration; any other use of the
+        # keyword falls through to being parsed as a plain identifier/await
+        # expression instead of being special-cased here.
+        if token.type == TokenType.ASYNC:
+            return self.parse_async_function_declaration()
         
         if token.type == TokenType.CLASS:
             return self.parse_class_declaration()
@@ -615,7 +622,29 @@ class Parser:
         declaration.attributes = attributes
         return declaration
 
-    def parse_function_declaration(self, is_meta: bool):
+    def parse_async_function_declaration(self):
+        """Parse 'async Function name(...) { ... }'.
+
+        'async' is only valid directly in front of a Function declaration
+        (not 'Meta', which is a constructor and never called/awaited like a
+        regular function). Kept as a thin wrapper around
+        parse_function_declaration rather than duplicating its body, so
+        parameter/body parsing stays identical between sync and async
+        functions.
+        """
+        async_token = self.current_token
+        self.advance()  # Skip 'async'
+
+        if not self.match(TokenType.FUNCTION):
+            found = self.current_token.type.name if self.current_token else 'EOF'
+            raise ParserError(
+                f"Expected 'Function' after 'async', but found {found}",
+                async_token.line, async_token.column
+            )
+
+        return self.parse_function_declaration(is_meta=False, is_async=True)
+
+    def parse_function_declaration(self, is_meta: bool, is_async: bool = False):
         """Parse Meta or Function declaration"""
         self.advance()  # Skip Meta/Function
         
@@ -637,12 +666,20 @@ class Parser:
         self.expect(TokenType.RPAREN)
         body = self.parse_block()
         
-        return FunctionDeclaration(
+        declaration = FunctionDeclaration(
             name=name,
             parameters=parameters,
             body=body,
             is_meta=is_meta
         )
+        # Set dynamically rather than as a constructor kwarg: FunctionDeclaration
+        # predates 'async', so this keeps every existing call site (and any
+        # other code that builds a FunctionDeclaration without knowing about
+        # 'async') working unchanged, while still exposing node.is_async to
+        # the interpreter for every function -- sync functions simply read
+        # back the default False set here.
+        declaration.is_async = is_async
+        return declaration
     
     def parse_class_declaration(self):
         """Parse Class declaration"""
@@ -1118,7 +1155,7 @@ class Parser:
         return left
     
     def parse_unary(self):
-        """Parse unary operations (-, not)"""
+        """Parse unary operations (-, not, await)"""
         if self.match(TokenType.MINUS, TokenType.NOT):
             operator_token = self.current_token
             self.advance()
@@ -1127,6 +1164,19 @@ class Parser:
                 operator=operator_token.value,
                 operand=operand
             ), operator_token)
+
+        # 'await' binds like a unary prefix operator so it composes with
+        # everything else at this precedence tier -- 'await Foo()',
+        # 'return await Foo()', and 'return 2 * await Foo()' (where the
+        # '*' is handled by parse_multiplication, one level up, and simply
+        # sees the whole await expression as its right operand) all fall
+        # out of this placement for free, with no separate grammar rule
+        # needed per call site.
+        if self.match(TokenType.AWAIT):
+            await_token = self.current_token
+            self.advance()
+            operand = self.parse_unary()
+            return self._tag(AwaitExpression(value=operand), await_token)
         
         return self.parse_primary()
     

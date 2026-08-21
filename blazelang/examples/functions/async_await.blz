@@ -1,0 +1,37 @@
+// async_await.blz
+// Demonstrates async/await support in BlazeLang.
+
+async Function Add(a, b) {
+    return a + b
+}
+
+async Function Slow(n) {
+    // await composes with any expression -- not just a bare statement.
+    var doubled = 2 * await Add(n, n)
+    return doubled
+}
+
+// Recursion works the same for async functions as for sync ones: each
+// call still gets its own scope, and 'await' just resolves the Future
+// each recursive call returns.
+async Function Factorial(n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * await Factorial(n - 1)
+}
+
+async Function Main() {
+    var result = await Add(2, 3)
+    Show(result)          // 5
+
+    var doubled = await Slow(4)
+    Show(doubled)         // 16
+
+    var fact = await Factorial(5)
+    Show(fact)            // 120
+
+    return "done"
+}
+
+Show(await Main())

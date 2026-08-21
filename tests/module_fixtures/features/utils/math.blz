@@ -1,2 +1,0 @@
-Export constant PI = 3.141592653589793
-Export Function add(a, b) { return a + b }

@@ -1,2 +1,0 @@
-Import { B } from "b.blz"
-Export var A = 1

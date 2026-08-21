@@ -1500,6 +1500,28 @@ class JSONError(BlazeError):
         )
 
 
+class InvalidAwaitError(RuntimeError):
+    """Raised when 'await' is used on something that isn't a value produced
+    by calling an async function (i.e. not a Future/Promise)."""
+
+    def __init__(self, actual_type: str = None, line: int = None, column: int = None, filename: str = None):
+        type_note = f" (found {actual_type})" if actual_type else ""
+        super().__init__(
+            f"'await' expects a value returned by an async function{type_note}",
+            line,
+            column,
+            filename,
+            code="BLZ2060",
+            hint=build_hint(
+                "'await' can only resolve a Future/Promise produced by calling an 'async Function'.",
+                fixes=[
+                    "Only 'await' the result of calling a function declared with 'async Function'.",
+                    "Remove 'await' if the value isn't the result of an async function call.",
+                ],
+            ),
+        )
+
+
 class InternalInterpreterError(BlazeError):
     """Raised for internal bug state in BlazeLang engine"""
 
@@ -1690,6 +1712,7 @@ class ErrorFormatter:
             "ModuleLoadError": "Check that the module is valid and all required files are available.",
             "FileExistsErrorBlaze": "Choose a different path or remove the existing file or directory first.",
             "OSErrorBlaze": "Check the filesystem path, permissions, and operating-system state.",
+            "InvalidAwaitError": "Only 'await' the result of calling an 'async Function'.",
         }
 
         error_type = type(error).__name__
