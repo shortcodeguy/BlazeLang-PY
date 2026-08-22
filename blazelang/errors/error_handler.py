@@ -1522,6 +1522,51 @@ class InvalidAwaitError(RuntimeError):
         )
 
 
+class ReflectExpectedFieldError(RuntimeError):
+    """Raised when an `expect` field declared inside `Reflect <operation>(...)`
+    is missing from the source data (at the top level or inside a nested
+    `expect` block)."""
+
+    def __init__(self, field_path: str, operation: str = "userdata", line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"Reflect {operation}: expected field '{field_path}' is missing",
+            line,
+            column,
+            filename,
+            code="BLZ7001",
+            hint=build_hint(
+                f"'{field_path}' is listed in an 'expect' block, so it must be present on the source data.",
+                fixes=[
+                    "Confirm the source (Http/JSON/File/object) actually includes this field.",
+                    "Move the field to 'accept' instead if it is genuinely optional.",
+                ],
+            ),
+        )
+
+
+class ReflectSourceTypeError(RuntimeError):
+    """Raised when `Reflect <operation>(...)` is given `accept`/`expect`/`reject`
+    field specs but the source value (or a nested value at a spec'd field)
+    isn't an object, array of objects, HTTP/JSON/File-sourced data, or null."""
+
+    def __init__(self, actual_type: str, field_path: str = None, operation: str = "userdata", line: int = None, column: int = None, filename: str = None):
+        where = f" at '{field_path}'" if field_path else ""
+        super().__init__(
+            f"Reflect {operation}: cannot apply field rules{where} to a value of type {actual_type}",
+            line,
+            column,
+            filename,
+            code="BLZ7002",
+            hint=build_hint(
+                "'accept'/'expect'/'reject' only make sense on objects (or arrays/lists of objects).",
+                fixes=[
+                    "Make sure the wrapped source produces an object, Struct, class instance, or a list of them.",
+                    "Remove the field spec for this value if it is meant to be a plain scalar.",
+                ],
+            ),
+        )
+
+
 class InternalInterpreterError(BlazeError):
     """Raised for internal bug state in BlazeLang engine"""
 
@@ -1713,6 +1758,8 @@ class ErrorFormatter:
             "FileExistsErrorBlaze": "Choose a different path or remove the existing file or directory first.",
             "OSErrorBlaze": "Check the filesystem path, permissions, and operating-system state.",
             "InvalidAwaitError": "Only 'await' the result of calling an 'async Function'.",
+            "ReflectExpectedFieldError": "Add the missing field to the source data, or move it out of 'expect'.",
+            "ReflectSourceTypeError": "'accept'/'expect'/'reject' only apply to objects or lists of objects.",
         }
 
         error_type = type(error).__name__

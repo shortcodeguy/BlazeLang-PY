@@ -1,16 +1,16 @@
 Class Counter {
-Constructor(start) {
-this.value = start
-}
+    Constructor(start) {
+        this.value = start
+    }
 
-Function Increment() {
-    this.value += 1
-    return this.value
-}
+    Function Increment() {
+        this.value += 1
+        return this.value
+    }
 
-Function Describe() {
-    return "Counter = " + this.value
-}
+    Function Describe() {
+        return "Counter = " + this.value
+    }
 
 }
 

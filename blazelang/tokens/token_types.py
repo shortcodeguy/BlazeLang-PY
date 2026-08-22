@@ -60,6 +60,15 @@ class TokenType(Enum):
     AND = auto()
     OR = auto()
     NOT = auto()
+
+    # Reflect <op>(...) keyword. The operation name after `Reflect` (e.g.
+    # `userdata`, `project`, `data`) is intentionally NOT its own token type
+    # -- it is parsed as a plain IDENTIFIER so any name works and none of
+    # them become reserved words.
+    REFLECT = auto()
+    ACCEPT = auto()
+    EXPECT = auto()
+    REJECT = auto()
     
     # Arithmetic Operators
     PLUS = auto()

@@ -383,3 +383,41 @@ class AttributeUsage(ASTNode):
     line: Optional[int] = None
     column: Optional[int] = None
     filename: Optional[str] = None
+
+
+# === Reflect Userdata ===
+
+@dataclass
+class ReflectFieldSpec(ASTNode):
+    """A field whitelist/requirement/blacklist tree used by `accept`,
+    `expect`, and `reject` blocks inside `Reflect userdata(...)`.
+
+    `fields` maps a field name to either `None` (a plain leaf field) or
+    another `ReflectFieldSpec` (the field is expected to hold a nested
+    object/array-of-objects, filtered by that nested spec)."""
+    fields: Dict[str, Optional['ReflectFieldSpec']] = field(default_factory=dict)
+
+
+@dataclass
+class ReflectUserdata(ASTNode):
+    """`Reflect <operation>(<source> { accept {...} expect {...} reject {...} })`
+
+    A dedicated language construct -- not a library function call -- that
+    evaluates `source` and returns a filtered/validated copy of it built
+    from the optional `accept` (whitelist), `expect` (required-field
+    check), and `reject` (blacklist, always wins over `accept`) specs.
+
+    `operation` is the free-form identifier written directly after
+    `Reflect` (e.g. `userdata`, `project`, `data`, `api`, `mydata`...). It
+    is never hardcoded by the parser/interpreter -- any identifier is
+    accepted and simply carried through as the operation's name, available
+    to the runtime/diagnostics for context.
+    """
+    operation: str
+    source: Any
+    accept: Optional[ReflectFieldSpec] = None
+    expect: Optional[ReflectFieldSpec] = None
+    reject: Optional[ReflectFieldSpec] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    filename: Optional[str] = None

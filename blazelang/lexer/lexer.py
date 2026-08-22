@@ -62,6 +62,10 @@ class Lexer:
             'true': TokenType.BOOLEAN,
             'false': TokenType.BOOLEAN,
             'null': TokenType.NULL,
+            'Reflect': TokenType.REFLECT,
+            'accept': TokenType.ACCEPT,
+            'expect': TokenType.EXPECT,
+            'reject': TokenType.REJECT,
         }
     
     def advance(self):

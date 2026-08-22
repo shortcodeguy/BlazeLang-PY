@@ -19,7 +19,7 @@ from blazelang.errors.error_handler import BlazeError, InternalInterpreterError,
 
 def print_banner():
     """Print the BlazeLang banner"""
-    print("BlazeLang v1.9")
+    print("BlazeLang v2.0")
     print("A modern programming language - Readable, Flexible, Structured")
     print()
 
@@ -223,7 +223,7 @@ def main():
 
     if command == "version":
         print_banner()
-        print("Version: 1.9")
+        print("Version: 2.0")
         print("Status: production")
 
     elif command == "help":

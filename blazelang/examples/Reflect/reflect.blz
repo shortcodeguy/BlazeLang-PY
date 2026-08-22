@@ -1,0 +1,34 @@
+Import Http from "http"
+
+var response = Http.Get(
+    "https://jsonplaceholder.typicode.com/users/1"
+)
+
+var user = Reflect project(
+    response.body {
+        accept {
+            id
+            name
+            email
+        }
+
+        expect {
+            id
+            name
+            email
+        }
+
+        reject {
+            phone
+            website
+            company
+        }
+    }
+)
+
+Show("=== REFLECT PROJECT ===")
+Show(user)
+
+Show("ID: " + String(user.id))
+Show("Name: " + user.name)
+Show("Email: " + user.email)

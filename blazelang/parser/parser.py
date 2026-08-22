@@ -1293,6 +1293,10 @@ class Parser:
             self.advance()
             return self._tag(Identifier(name=name), token)
         
+        # Reflect <operation>(...) construct
+        if token.type == TokenType.REFLECT:
+            return self.parse_reflect_userdata()
+
         # Array literals
         if token.type == TokenType.LBRACKET:
             return self.parse_array_literal()
@@ -1318,6 +1322,126 @@ class Parser:
             token.column
         )
     
+    # =====================
+    # Reflect Userdata
+    # =====================
+
+    def parse_reflect_userdata(self):
+        """Parse `Reflect <operation>( <source-expr> { accept{...} expect{...} reject{...} } )`.
+
+        The operation name (`userdata`, `project`, `data`, `api`, or any
+        other identifier) is read generically as an IDENTIFIER -- it is
+        never matched against a fixed keyword -- and stored on the
+        resulting node so any name works without the parser hardcoding it.
+
+        This is deliberately its own grammar rule rather than a normal
+        function call: the trailing `{ accept {...} expect {...} reject
+        {...} }` block is not an object literal (its entries are bare
+        `name { ... }` / `name` field specs, not `key: value` pairs), so it
+        can't be reused through parse_object_literal/parse_call_argument.
+        """
+        start_token = self.current_token
+        self.advance()  # Skip 'Reflect'
+
+        operation_token = self.expect(TokenType.IDENTIFIER)
+        operation_name = operation_token.value
+
+        self.expect(TokenType.LPAREN)
+
+        source_expr = self.parse_expression()
+
+        accept_spec = None
+        expect_spec = None
+        reject_spec = None
+
+        if self.match(TokenType.LBRACE):
+            self.advance()  # Skip {
+
+            while not self.match(TokenType.RBRACE):
+                if self.current_token is None or self.current_token.type == TokenType.EOF:
+                    raise ParserError(
+                        f"Unterminated 'Reflect {operation_name}' options block, expected '}}'",
+                        start_token.line, start_token.column, start_token.filename
+                    )
+
+                section_token = self.current_token
+
+                if section_token.type == TokenType.ACCEPT:
+                    self.advance()
+                    if accept_spec is not None:
+                        raise ParserError(
+                            f"Duplicate 'accept' block inside 'Reflect {operation_name}'",
+                            section_token.line, section_token.column, section_token.filename
+                        )
+                    accept_spec = self.parse_reflect_field_block()
+                elif section_token.type == TokenType.EXPECT:
+                    self.advance()
+                    if expect_spec is not None:
+                        raise ParserError(
+                            f"Duplicate 'expect' block inside 'Reflect {operation_name}'",
+                            section_token.line, section_token.column, section_token.filename
+                        )
+                    expect_spec = self.parse_reflect_field_block()
+                elif section_token.type == TokenType.REJECT:
+                    self.advance()
+                    if reject_spec is not None:
+                        raise ParserError(
+                            f"Duplicate 'reject' block inside 'Reflect {operation_name}'",
+                            section_token.line, section_token.column, section_token.filename
+                        )
+                    reject_spec = self.parse_reflect_field_block()
+                else:
+                    raise ParserError(
+                        f"Expected 'accept', 'expect', or 'reject' inside 'Reflect {operation_name}' options, "
+                        f"but found {section_token.type.name}",
+                        section_token.line, section_token.column, section_token.filename
+                    )
+
+            self.expect(TokenType.RBRACE)
+
+        self.expect(TokenType.RPAREN)
+
+        return self._tag(ReflectUserdata(
+            operation=operation_name,
+            source=source_expr,
+            accept=accept_spec,
+            expect=expect_spec,
+            reject=reject_spec,
+        ), start_token)
+
+    def parse_reflect_field_block(self) -> 'ReflectFieldSpec':
+        """Parse a `{ field field2 { nested } ... }` field-spec block used by
+        `accept`/`expect`/`reject`. Fields may be separated by newlines
+        (already discarded by the lexer) or an optional comma, and a field
+        may itself carry a nested block to describe a nested object/array
+        of objects.
+        """
+        open_token = self.current_token
+        self.expect(TokenType.LBRACE)
+
+        fields = {}
+
+        while not self.match(TokenType.RBRACE):
+            if self.current_token is None or self.current_token.type == TokenType.EOF:
+                raise ParserError(
+                    "Unterminated field block, expected '}'",
+                    open_token.line, open_token.column, open_token.filename
+                )
+
+            name_token = self.expect(TokenType.IDENTIFIER)
+
+            nested_spec = None
+            if self.match(TokenType.LBRACE):
+                nested_spec = self.parse_reflect_field_block()
+
+            fields[name_token.value] = nested_spec
+
+            if self.match(TokenType.COMMA):
+                self.advance()
+
+        self.expect(TokenType.RBRACE)
+        return ReflectFieldSpec(fields=fields)
+
     def parse_array_literal(self):
         """Parse array literal"""
         self.advance()  # Skip [

@@ -1,20 +1,20 @@
 Import Json from "json"
 
 Struct User {
-name
-active = true
+    name
+    active = true
 }
 
 Struct Address {
-city
-pin
+    city
+    pin
 }
 
 Struct Profile {
-user
-address
-tags
-value = null
+    user
+    address
+    tags
+    value = null
 }
 
 var profile = Profile(

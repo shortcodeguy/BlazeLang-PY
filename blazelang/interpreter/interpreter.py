@@ -36,6 +36,8 @@ from blazelang.errors.error_handler import (
     UnsupportedBindOperationError,
     InvalidBindStateError,
     InvalidAwaitError,
+    ReflectExpectedFieldError,
+    ReflectSourceTypeError,
 )
 from typing import Any, Callable, Dict, List
 import re
@@ -1642,6 +1644,114 @@ class Interpreter:
         result = {}
         for key, value_expr in node.properties.items():
             result[key] = self.visit(value_expr)
+        return result
+
+    # =====================
+    # Reflect <operation>
+    # =====================
+
+    def visit_ReflectUserdata(self, node: ReflectUserdata) -> Any:
+        """`Reflect <operation>(<source> { accept{} expect{} reject{} })`.
+
+        `operation` is whatever identifier followed `Reflect` in source
+        (`userdata`, `project`, `data`, `api`, ...) -- it is never matched
+        against a fixed name, only carried along for diagnostics/context.
+
+        Evaluates `source` (an HTTP response, parsed JSON, a File read, an
+        object/Struct/class instance, or a list of any of those) and returns
+        a *new* plain-object/array copy filtered by the field rules:
+
+        - `expect` fields must exist on the value at that point in the tree,
+          or a ReflectExpectedFieldError is raised.
+        - `accept`, if given, whitelists which fields make it into the
+          output at that level.
+        - `reject` blacklists fields and always wins over `accept` -- a
+          rejected field is never created/retained in the result.
+
+        The rules recurse into nested objects and arrays of objects wherever
+        a nested accept/expect/reject block is provided for that field.
+        """
+        source_value = self.visit(node.source)
+        return self._reflect_filter(source_value, node.accept, node.expect, node.reject, node, "")
+
+    @staticmethod
+    def _reflect_object_view(value: Any):
+        """Return (keys, getter) if `value` is an object-like runtime value
+        Reflect knows how to walk (a plain dict -- which is what object
+        literals, and any HTTP/JSON/File-sourced data, evaluate to -- a
+        class Instance, or a Struct instance). Returns None for anything
+        else (numbers, strings, booleans, etc.)."""
+        if isinstance(value, dict):
+            return list(value.keys()), value.__getitem__
+        if isinstance(value, Instance):
+            return list(value.properties.keys()), value.properties.__getitem__
+        if isinstance(value, StructInstance):
+            return list(value.properties.keys()), value.properties.__getitem__
+        return None
+
+    def _reflect_filter(self, value: Any, accept, expect, reject, node: 'ReflectUserdata', path: str) -> Any:
+        """Recursively apply accept/expect/reject field specs to `value`."""
+
+        # Arrays: apply the same specs element-wise (e.g. a list of user
+        # objects from an HTTP/JSON array).
+        if isinstance(value, list):
+            return [
+                self._reflect_filter(item, accept, expect, reject, node, path)
+                for item in value
+            ]
+
+        if value is None:
+            if expect and expect.fields:
+                missing = next(iter(expect.fields))
+                full_path = f"{path}.{missing}" if path else missing
+                raise ReflectExpectedFieldError(full_path, node.operation, node.line, node.column, node.filename)
+            return None
+
+        view = self._reflect_object_view(value)
+        if view is None:
+            # A plain scalar reached a point in the tree where field rules
+            # were declared -- there is nothing to accept/expect/reject.
+            if accept or expect or reject:
+                raise ReflectSourceTypeError(
+                    type(value).__name__, path or None, node.operation, node.line, node.column, node.filename
+                )
+            return value
+
+        keys, getter = view
+
+        if expect:
+            for field_name in expect.fields:
+                if field_name not in keys:
+                    full_path = f"{path}.{field_name}" if path else field_name
+                    raise ReflectExpectedFieldError(full_path, node.operation, node.line, node.column, node.filename)
+
+        selected_keys = [k for k in accept.fields if k in keys] if accept else list(keys)
+
+        result = {}
+        for key in selected_keys:
+            sub_accept = accept.fields.get(key) if accept else None
+            sub_expect = expect.fields.get(key) if expect else None
+            sub_reject = reject.fields.get(key) if (reject and key in reject.fields) else None
+
+            # 'reject' always overrides 'accept' -- a rejected field is never
+            # created or retained in the resulting userdata. A *leaf* reject
+            # entry (no nested block, e.g. `reject { password }`) drops the
+            # field entirely; a reject entry with its own nested block
+            # (e.g. `reject { address { secret_note } }`) only prunes the
+            # named sub-fields, so the parent field itself is kept and
+            # filtered recursively below.
+            if reject and key in reject.fields and sub_reject is None:
+                continue
+            sub_path = f"{path}.{key}" if path else key
+            field_value = getter(key)
+
+            if sub_accept is not None or sub_expect is not None or sub_reject is not None:
+                result[key] = self._reflect_filter(
+                    field_value, sub_accept, sub_expect, sub_reject, node, sub_path
+                )
+            else:
+                result[key] = field_value
+
         return result
 
     def _check_member_access(self, member: Any, member_name: str):
