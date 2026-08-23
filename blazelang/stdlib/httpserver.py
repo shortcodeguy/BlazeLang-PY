@@ -341,15 +341,7 @@ class Request:
         self.method = handler.command
         self.path = handler.path
         self.url = handler.path
-        # NOTE: handler.headers is an email.message.Message, which is
-        # case-insensitive on lookup (per RFC 7230, header field names are
-        # case-insensitive). Converting it to a plain dict() loses that
-        # case-insensitivity, so all *internal* lookups below use
-        # handler.headers.get(...) directly rather than self.headers.get(...).
-        # self.headers itself is still exposed to BlazeLang/user code as a
-        # plain dict for convenience.
         self.headers = dict(handler.headers)
-        # Prefer a forwarded client IP if present (e.g. behind a proxy), else socket address
         forwarded_for = handler.headers.get('X-Forwarded-For', '')
         if forwarded_for:
             self.client_ip = forwarded_for.split(',')[0].strip()
@@ -360,37 +352,26 @@ class Request:
         self.user_agent = handler.headers.get('User-Agent', '')
         self.timestamp = datetime.datetime.utcnow().isoformat() + 'Z'
 
-        # Parse URL. The path portion is percent-decoded so that routes and
-        # static files with spaces/unicode/reserved characters (e.g. "%20")
-        # resolve correctly, and so that path-traversal checks downstream see
-        # the real characters rather than an encoded payload.
         parsed = urllib.parse.urlparse(handler.path)
         self.path = urllib.parse.unquote(parsed.path)
         self.query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-        # Flatten query values (take first)
         self.query = {k: v[0] if v else '' for k, v in self.query.items()}
 
-        # Params (path parameters, filled later by router)
         self.params = {}
 
-        # Cookies
         cookie_header = handler.headers.get('Cookie', '')
         self.cookies = parse_cookie_string(cookie_header)
 
-        # Body and derived fields
         self.body = ''
         self.json = None
         self.form = {}
         self.files = {}
         self._parse_body()
 
-        # Session (placeholder, will be filled by middleware)
         self.session = {}
 
     def _parse_body(self) -> None:
         """Parse request body based on Content-Type."""
-        # Use the original (case-insensitive) headers object here, not the
-        # plain self.headers dict -- see note in __init__.
         try:
             content_length = int(self.handler.headers.get('Content-Length', 0) or 0)
         except ValueError:
@@ -398,13 +379,11 @@ class Request:
         if content_length <= 0:
             return
 
-        # Read body
         raw_body = self.handler.rfile.read(content_length)
         self.body = raw_body
 
         content_type = self.handler.headers.get('Content-Type', '') or ''
 
-        # JSON
         if 'application/json' in content_type:
             try:
                 self.json = json.loads(raw_body.decode('utf-8'))
@@ -412,7 +391,6 @@ class Request:
                 raise BadRequestError("Invalid JSON body")
             return
 
-        # URL-encoded form
         if 'application/x-www-form-urlencoded' in content_type:
             try:
                 decoded = raw_body.decode('utf-8')
@@ -422,9 +400,7 @@ class Request:
                 raise BadRequestError("Invalid form encoding")
             return
 
-        # Multipart form
         if 'multipart/form-data' in content_type:
-            # Extract boundary
             boundary = None
             for part in content_type.split(';'):
                 part = part.strip()
@@ -435,7 +411,6 @@ class Request:
                     break
             if not boundary:
                 raise BadRequestError("Missing boundary in multipart/form-data")
-            # Parse multipart
             try:
                 self.form, self.files = parse_multipart_form_data(
                     raw_body,
@@ -446,7 +421,6 @@ class Request:
                 raise BadRequestError(str(e))
             return
 
-        # Plain text or other
         try:
             self.body = raw_body.decode('utf-8')
         except UnicodeDecodeError:
@@ -515,7 +489,6 @@ class Response:
         status = self.status
         headers = dict(self.headers)
 
-        # Process body
         if isinstance(self.body, (dict, list)):
             headers['Content-Type'] = 'application/json'
             body_str = json.dumps(self.body)
@@ -531,27 +504,18 @@ class Response:
         elif self.body is None:
             body = b''
         else:
-            # Convert to string
             body = str(self.body).encode('utf-8')
             if 'Content-Type' not in headers:
                 headers['Content-Type'] = 'text/plain'
 
-        # Set Content-Length
         headers['Content-Length'] = str(len(body))
 
-        # Set cookies. Per RFC 6265, multiple Set-Cookie headers must be sent
-        # as separate header lines -- unlike most headers, Set-Cookie values
-        # cannot be safely comma-joined (commas are legal inside e.g. the
-        # Expires attribute, so a combined value is ambiguous/invalid and
-        # many clients will fail to parse it). We store the list here and
-        # _send_response() sends one "Set-Cookie" header per entry.
         cookie_headers = []
         for name, (value, kwargs) in self.cookies.items():
             cookie_headers.append(serialize_cookie(name, value, **kwargs))
         if cookie_headers:
             headers['Set-Cookie'] = cookie_headers
 
-        # Normalize ContentType to Content-Type
         if 'ContentType' in headers:
             headers['Content-Type'] = headers.pop('ContentType')
 
@@ -631,24 +595,12 @@ def compile_route_pattern(pattern: str) -> Tuple[Pattern, List[str]]:
     Convert route pattern like '/users/{id}' to regex and parameter names.
     Returns (regex, param_names).
     """
-    # Escape regex special characters
-    # Replace {param} with named capture group
     param_names = []
-    # We'll replace {param} with (?P<param>[^/]+)
-    # But we need to escape other regex characters
-    # First, escape everything
-    escaped = re.escape(pattern)
-    # Now replace escaped braces: \\{ -> {
-    # But we need to handle {param} specifically
-    # We'll manually parse
-    # Better: use a placeholder approach
-    # We'll find all occurrences of {identifier}
     param_pattern = re.compile(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}')
     def repl(match):
         param_names.append(match.group(1))
         return r'([^/]+)'
     regex_str = param_pattern.sub(repl, pattern)
-    # Ensure full match
     regex_str = '^' + regex_str + '$'
     return re.compile(regex_str), param_names
 
@@ -737,7 +689,6 @@ class RouteGroup:
     """
     def __init__(self, server: 'BlazeHttpServer', prefix: str):
         self.server = server
-        # Normalize: no trailing slash on the prefix itself
         self.prefix = prefix[:-1] if prefix.endswith('/') and prefix != '/' else prefix
 
     def __enter__(self):
@@ -757,14 +708,22 @@ class BlazeHttpServer:
 
     def __init__(self, interpreter):
         self.interpreter = interpreter
-        self.routes = []  # List of (method, pattern, handler)
-        self.middleware = []  # List of callables
+        self.routes = []
+        self.middleware = []
         self.static_directory = None
         self.default_callback = None
         self.config = {
             'max_upload_size': DEFAULT_MAX_UPLOAD_SIZE,
             'request_timeout': DEFAULT_REQUEST_TIMEOUT,
             'enable_cors': True,
+            # Cross-site requests that carry cookies/Authorization (i.e. any
+            # "site tries to contact it" scenario using the session cookie
+            # this server issues) are dropped SILENTLY by the browser -- no
+            # console error, nothing observable from the calling page -- if
+            # Allow-Origin is the literal '*' wildcard, because the CORS
+            # spec forbids pairing a wildcard origin with credentials. See
+            # _cors_headers() below for the actual fix.
+            'cors_allow_credentials': True,
             'enable_compression': True,
             'enable_sessions': True,
             'session_cookie_name': DEFAULT_SESSION_COOKIE_NAME,
@@ -772,7 +731,6 @@ class BlazeHttpServer:
             'ssl_key': None,
             'enable_https': False,
             'keep_alive': True,
-            # Rate limiting is disabled by default; set 'rate_limit_max' (>0) to enable.
             'rate_limit_max': None,
             'rate_limit_window': DEFAULT_RATE_LIMIT_WINDOW,
         }
@@ -827,7 +785,6 @@ class BlazeHttpServer:
         for key, value in kwargs.items():
             if key in self.config:
                 self.config[key] = value
-        # (Re)build the rate limiter if rate limiting configuration changed.
         max_requests = self.config.get('rate_limit_max')
         if max_requests:
             self._rate_limiter = RateLimiter(
@@ -852,33 +809,23 @@ class BlazeHttpServer:
         Apply middleware chain.
         Returns True if chain completed, False if response was sent early.
         """
-        # We'll create a simple chain
         def chain(index):
             if index >= len(self.middleware):
                 return True
             middleware = self.middleware[index]
             next_fn = lambda: chain(index + 1)
-            # Mirror the route-handler dispatch below: a BlazeLang function
-            # value must be invoked as callback(interpreter, [args...]),
-            # while a plain Python callable is invoked directly. Previously
-            # middleware was always called the Python way, so BlazeLang
-            # middleware registered via use() would receive the wrong
-            # arguments (or crash) instead of (req, res, next).
             if hasattr(middleware, "__call__") and hasattr(middleware, "parameters"):
                 result = middleware(self.interpreter, [request.to_dict(), response, next_fn])
             else:
                 result = middleware(request, response, next_fn)
             if result is not None:
-                # If middleware returns a response dict, use it
                 if isinstance(result, dict):
                     response.status = result.get('status', 200)
                     response.headers = result.get('headers', {})
                     response.body = result.get('body', None)
-                    # Cookies
                     if 'cookies' in result:
                         for k, v in result['cookies'].items():
                             response.set_cookie(k, v)
-                    # Short-circuit
                     return False
             return True
         return chain(0)
@@ -889,18 +836,15 @@ class BlazeHttpServer:
         request = None
         response = None
         try:
-            # Create request object
             request = Request(handler)
             response = Response()
 
-            # Optional per-IP rate limiting (disabled unless configured)
             if self._rate_limiter is not None:
                 if not self._rate_limiter.is_allowed(request.client_ip):
                     self._send_error(handler, 429, "Too Many Requests", request.request_id)
                     self._log_request(request, 429, start_time)
                     return
 
-            # Session handling
             session_cookie = self.config['session_cookie_name']
             session_id = request.cookies.get(session_cookie)
             if session_id and self.config['enable_sessions']:
@@ -908,53 +852,38 @@ class BlazeHttpServer:
                 if session_data is not None:
                     request.session = session_data
 
-            # Apply middleware
             chain_ok = self._apply_middleware(request, response)
             if not chain_ok:
-                # Response already set by middleware, send it
                 self._send_response(handler, response)
                 self._log_request(request, response.status, start_time)
                 return
 
-            # Find route handler
             route_handler, route_params = self._find_route_handler(request.method, request.path)
             if route_handler:
                 request.params = route_params
                 callback = route_handler
             else:
-                # Check static files. HEAD must be served the same way as
-                # GET (same headers/ETag/Content-Length), just without a
-                # body -- that suppression happens later in
-                # _send_response(), not here.
                 if self.static_directory and request.method in ('GET', 'HEAD'):
                     served = self._serve_static(handler, request, response)
                     if served:
                         self._log_request(request, response.status, start_time)
                         return
-                # Fallback to default callback
                 callback = self.default_callback
 
             if callback is None:
-                # No handler found
                 raise NotFoundError(request.path)
 
-            # Execute callback
-            # Check if BlazeLang function
             if hasattr(callback, "__call__") and hasattr(callback, "parameters"):
-                # BlazeLang function: call with interpreter and [request]
                 result = callback(self.interpreter, [request.to_dict()])
             else:
-                # Normal Python callable
                 result = callback(request.to_dict())
 
-            # Build response from result
             if isinstance(result, Response):
                 response = result
             elif isinstance(result, dict):
                 response.status = result.get('status', 200)
                 response.headers = result.get('headers', {})
                 response.body = result.get('body', None)
-                # Cookies
                 if 'cookies' in result:
                     for k, v in result['cookies'].items():
                         if isinstance(v, dict):
@@ -964,7 +893,6 @@ class BlazeHttpServer:
             else:
                 response.body = str(result)
 
-            # Save session if modified
             if self.config['enable_sessions'] and request.session:
                 if not session_id:
                     session_id = str(uuid.uuid4())
@@ -981,7 +909,6 @@ class BlazeHttpServer:
             self._send_error(handler, e.status, e.message, req_id)
             self._log_request(request, e.status, start_time)
         except Exception as e:
-            # Internal server error
             req_id = request.request_id if request else None
             self._send_error(handler, 500, f"Internal Server Error: {str(e)}", req_id)
             self._log_request(request, 500, start_time)
@@ -997,23 +924,58 @@ class BlazeHttpServer:
         else:
             print(f"[unknown] -> {status} ({elapsed_ms:.2f}ms)")
 
+    def _cors_headers(self, handler: http.server.BaseHTTPRequestHandler) -> Dict[str, str]:
+        """Build the CORS headers for a response/preflight.
+
+        THE FIX: a literal 'Access-Control-Allow-Origin: *' is invalid for
+        any credentialed request (cookies, Authorization headers). The
+        browser doesn't raise a visible error for this -- it just refuses
+        to expose the response to the calling page's JS (and, for a
+        preflight, refuses to even send the real request afterwards). That
+        is exactly what makes this look like "nothing happens": a plain
+        top-level browser navigation to a route works fine (CORS is never
+        enforced for that), but another site's JS calling the same route --
+        especially once it's carrying the session cookie this server
+        issues -- gets silently dropped by the browser, not by this server.
+
+        Fix: reflect the caller's actual Origin header back (instead of the
+        blanket '*') and send Access-Control-Allow-Credentials so
+        credentialed cross-origin calls are actually allowed. Falls back to
+        '*' only when there's no Origin header to reflect at all (i.e. not
+        a browser cross-origin call, so credentials aren't in play).
+        """
+        origin = handler.headers.get('Origin')
+        headers = {}
+        if origin and self.config.get('cors_allow_credentials'):
+            headers['Access-Control-Allow-Origin'] = origin
+            headers['Access-Control-Allow-Credentials'] = 'true'
+            # Response varies by Origin now -- tell caches/CDNs not to
+            # reuse it for a different Origin.
+            headers['Vary'] = 'Origin'
+        else:
+            headers['Access-Control-Allow-Origin'] = origin or '*'
+        headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+        # Reflect whatever headers the preflight actually asked for rather
+        # than a blanket '*' -- '*' is not honored by browsers for the
+        # Authorization header specifically, so echoing back exactly what
+        # was requested is the only form that reliably clears preflight
+        # for every credentialed case.
+        requested_headers = handler.headers.get('Access-Control-Request-Headers')
+        headers['Access-Control-Allow-Headers'] = requested_headers if requested_headers else '*'
+        headers['Access-Control-Max-Age'] = '86400'
+        return headers
+
     def _send_response(self, handler: http.server.BaseHTTPRequestHandler, response: Response) -> None:
         """Send HTTP response."""
         status, headers, body = response.to_http_response()
 
-        # CORS headers
         if self.config['enable_cors']:
-            headers['Access-Control-Allow-Origin'] = '*'
-            headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-            headers['Access-Control-Allow-Headers'] = '*'
-            if 'Access-Control-Max-Age' not in headers:
-                headers['Access-Control-Max-Age'] = '86400'
+            for key, value in self._cors_headers(handler).items():
+                headers[key] = value
 
-        # Compression
         if self.config['enable_compression'] and is_compressible(headers.get('Content-Type', '')):
             accept_encoding = handler.headers.get('Accept-Encoding', '')
             if 'gzip' in accept_encoding and len(body) > 1024:
-                # Compress
                 out = io.BytesIO()
                 with gzip.GzipFile(fileobj=out, mode='wb') as gz:
                     gz.write(body)
@@ -1023,13 +985,9 @@ class BlazeHttpServer:
                     headers['Content-Encoding'] = 'gzip'
                     headers['Content-Length'] = str(len(body))
 
-        # ETag (if not present and body not too large)
         if 'ETag' not in headers and len(body) < 1024*1024:
             headers['ETag'] = generate_etag(body)
 
-        # Send. Content-Length/ETag/etc. above are always computed from the
-        # real (would-be) body so a HEAD response reports accurate headers;
-        # per RFC 7231 sec 4.3.2 a HEAD response must NOT include a body.
         handler.send_response(status)
         for key, value in headers.items():
             if key == 'Set-Cookie' and isinstance(value, list):
@@ -1052,60 +1010,37 @@ class BlazeHttpServer:
 
     def _serve_static(self, handler: http.server.BaseHTTPRequestHandler, request: Request, response: Response) -> bool:
         """Serve static file if exists and matches request."""
-        # Get relative path. request.path is already percent-decoded (see
-        # Request.__init__), so this check runs against the real characters
-        # instead of an encoded traversal payload like "%2e%2e%2f".
         path = request.path
-        # Remove leading slash and any query
         if path.startswith('/'):
             path = path[1:]
-        # Reject absolute paths, backslashes, NUL bytes, and any literal ".."
-        # segment up front. An empty path (the site root, e.g. requesting
-        # "/") is valid and resolves to the static directory itself, which
-        # is handled by the is-a-directory branch below (serves index.html).
         if '..' in path or path.startswith('/') or path.startswith('\\') or '\x00' in path:
             return False
         full_path = os.path.normpath(os.path.join(self.static_directory, path))
-        # Defense in depth: even after the checks above, resolve symlinks and
-        # confirm the final real path is still contained within the static
-        # root before touching the filesystem. Prevents traversal via
-        # symlinks or platform-specific path quirks that a string check on
-        # 'path' alone wouldn't catch.
         real_root = os.path.realpath(self.static_directory)
         real_path = os.path.realpath(full_path)
         if real_path != real_root and not real_path.startswith(real_root + os.sep):
             return False
         if not os.path.exists(full_path):
             return False
-        # Check if it's a directory
         if os.path.isdir(full_path):
-            # Try index.html
             index_path = os.path.join(full_path, 'index.html')
             if os.path.exists(index_path):
                 full_path = index_path
             else:
-                # List directory? Not recommended; return 404
                 return False
-        # Check if file
         if not os.path.isfile(full_path):
             return False
-        # Read file
         try:
             with open(full_path, 'rb') as f:
                 file_data = f.read()
         except (IOError, OSError):
             return False
-        # Check file size
         if len(file_data) > self.config['max_upload_size']:
             return False
-        # Set response
         response.status = 200
         response.headers['Content-Type'] = get_mime_type(full_path)
-        # Cache control
         response.headers['Cache-Control'] = 'public, max-age=3600'
-        # ETag
         response.headers['ETag'] = generate_etag(file_data)
-        # Check If-None-Match
         if 'If-None-Match' in handler.headers:
             if handler.headers['If-None-Match'] == response.headers['ETag']:
                 response.status = 304
@@ -1119,14 +1054,9 @@ class BlazeHttpServer:
     def listen(self, port: int, callback: Callable) -> None:
         """Start the server."""
         self.default_callback = callback
-        
-        # Ensure port is integer
         port = int(port)
-
-        # Create server
         handler_class = self._create_handler_class()
 
-        # Configure socket
         server = socketserver.ThreadingTCPServer(
             ('', port),
             handler_class
@@ -1140,7 +1070,6 @@ class BlazeHttpServer:
             context.load_cert_chain(self.config['ssl_cert'], self.config['ssl_key'])
             server.socket = context.wrap_socket(server.socket, server_side=True)
 
-        # Set request timeout
         if self.config['request_timeout']:
             server.socket.settimeout(self.config['request_timeout'])
 
@@ -1166,15 +1095,22 @@ class BlazeHttpServer:
             """Internal request handler."""
 
             def setup(self):
-                super().setup()
+                # self.timeout must be set BEFORE calling super().setup():
+                # socketserver.StreamRequestHandler.setup() reads
+                # self.timeout right there to decide whether to call
+                # self.connection.settimeout(...). Setting it afterwards (as
+                # this previously did) meant the per-connection socket
+                # timeout was silently never applied -- the base class saw
+                # the default class-level self.timeout (None) and skipped
+                # settimeout() entirely, leaving connections able to block
+                # forever instead of respecting request_timeout.
                 self.timeout = server_ref.config.get('request_timeout', 30)
+                super().setup()
 
             def handle_one_request(self):
-                # Override to handle keep-alive? We'll keep default.
                 try:
                     super().handle_one_request()
                 except socket.timeout:
-                    # Ignore timeouts
                     pass
 
             def do_GET(self):
@@ -1204,18 +1140,21 @@ class BlazeHttpServer:
                 if route_handler is not None:
                     server_ref.handle_request(self)
                     return
-                # Default: CORS preflight response.
+                # Default: CORS preflight response. Now uses the exact same
+                # _cors_headers() logic as real responses (see that method
+                # for the credentials fix) -- previously this had its own,
+                # separate wildcard-only header block, so a credentialed
+                # cross-origin call could pass this preflight's blanket
+                # checks yet still have the *real* response silently
+                # rejected by the browser because the two header sets
+                # disagreed.
                 response = Response()
                 response.status = 200
                 if server_ref.config['enable_cors']:
-                    response.headers['Access-Control-Allow-Origin'] = '*'
-                    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-                    response.headers['Access-Control-Allow-Headers'] = '*'
-                    response.headers['Access-Control-Max-Age'] = '86400'
+                    response.set_headers(server_ref._cors_headers(self))
                 server_ref._send_response(self, response)
 
             def log_message(self, format, *args):
-                # Custom logging
                 print(f"{self.address_string()} - - [{self.log_date_time_string()}] {format % args}")
 
         return BlazeHTTPRequestHandler
@@ -1223,13 +1162,6 @@ class BlazeHttpServer:
     def stop(self) -> None:
         """
         Gracefully stop the server.
-
-        This can race with listen()'s own `finally: self.stop()` (e.g. an
-        external caller invokes stop() while serve_forever() is returning
-        after its own shutdown()). Take the instance under a lock and clear
-        it immediately so a concurrent/duplicate call is a no-op instead of
-        calling shutdown()/server_close() on a None or already-closed
-        server.
         """
         with self._stop_lock:
             server = self._server_instance
@@ -1249,49 +1181,30 @@ class BlazeHttpServer:
 def create_httpserver_module(interpreter) -> Dict[str, Any]:
     """
     Create the BlazeLang HttpServer module.
-
-    Args:
-        interpreter: The BlazeLang interpreter instance.
-
-    Returns:
-        A dictionary with the server functions.
     """
     server = BlazeHttpServer(interpreter)
 
     def listen(port: int, callback: Callable) -> None:
-        """Start the server on the given port with the default callback."""
         server.listen(int(port), callback)
 
     def stop() -> None:
-        """Stop the server."""
         server.stop()
 
     def route(path: str, methods: List[str] = None, handler: Callable = None) -> Callable:
-        """
-        Register a route.
-
-        Supports both calling conventions:
-          - Decorator style:   route(path, methods)(handler)
-          - Direct call style: route(path, methods, handler)
-        """
         if handler is not None:
             return server.route(path, methods)(handler)
         return server.route(path, methods)
 
     def static(directory: str) -> None:
-        """Set static files directory."""
         server.static(directory)
 
     def use(middleware_func: Callable) -> None:
-        """Register middleware."""
         server.use(middleware_func)
 
     def configure(**kwargs) -> None:
-        """Set server configuration."""
         server.configure(**kwargs)
 
     def group(prefix: str):
-        """Create a route group/prefix (usable as a context manager)."""
         return server.group(prefix)
 
     return {
@@ -1303,14 +1216,12 @@ def create_httpserver_module(interpreter) -> Dict[str, Any]:
         'configure': configure,
         'group': group,
 
-        # Response helpers
         'json_response': JSON,
         'text_response': Text,
         'redirect': Redirect,
         'file_response': File,
         'status_response': Status,
 
-        # HTTP status helpers
         'bad_request': BadRequest,
         'unauthorized': Unauthorized,
         'forbidden': Forbidden,
@@ -1318,14 +1229,11 @@ def create_httpserver_module(interpreter) -> Dict[str, Any]:
         'method_not_allowed': MethodNotAllowed,
         'internal_server_error': InternalServerError,
 
-        # Auth utilities
         'parse_basic_auth': parse_basic_auth,
         'parse_bearer_token': parse_bearer_token,
 
-        # JWT utilities
         'jwt_encode': jwt_encode,
         'jwt_decode': jwt_decode,
 
-        # Request ID utility
         'generate_request_id': generate_request_id,
     }

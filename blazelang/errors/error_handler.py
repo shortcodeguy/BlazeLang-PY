@@ -357,6 +357,38 @@ class ArgumentError(BlazeError):
             hint=f"Adjust the argument count when calling '{func_name}()'.",
         )
 
+    @classmethod
+    def for_type_mismatch(
+        cls,
+        func_name: str,
+        expected_type: str,
+        given_value,
+        line: int = None,
+        column: int = None,
+        filename: str = None,
+    ) -> 'ArgumentError':
+        """Alternate constructor for when an argument has the wrong runtime
+        *type* rather than the wrong *count* (e.g. `eval(123)` -- eval only
+        ever accepts a string). Still raises plain ArgumentError -- callers
+        catching ArgumentError don't need a second except clause -- just
+        with a type-focused message instead of the count-focused one built
+        by __init__."""
+        given_type = type(given_value).__name__
+        err = cls.__new__(cls)
+        BlazeError.__init__(
+            err,
+            f"Function '{func_name}' expects a {expected_type} argument, but received {given_type}",
+            line,
+            column,
+            filename,
+            code="BLZ2007",
+            hint=build_hint(
+                f"'{func_name}()' requires its argument to be a {expected_type}.",
+                fixes=[f"Pass a {expected_type} value to '{func_name}()'."],
+            ),
+        )
+        return err
+
 
 class AccessError(RuntimeError):
     """Raised when private/protected members are accessed from outside their owning class"""
@@ -1562,6 +1594,28 @@ class ReflectSourceTypeError(RuntimeError):
                 fixes=[
                     "Make sure the wrapped source produces an object, Struct, class instance, or a list of them.",
                     "Remove the field spec for this value if it is meant to be a plain scalar.",
+                ],
+            ),
+        )
+
+
+class EvalDepthExceededError(RuntimeError):
+    """Raised when nested `eval()`/`evalFile()` calls (e.g. a string that
+    itself calls `eval(...)`, repeated) exceed the maximum allowed nesting
+    depth -- a guard against runaway/infinite evaluation."""
+
+    def __init__(self, max_depth: int, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            f"eval() nesting exceeded the maximum allowed depth of {max_depth}",
+            line,
+            column,
+            filename,
+            code="BLZ7003",
+            hint=build_hint(
+                "Each 'eval(...)' call that itself evaluates another 'eval(...)' string adds one level of nesting.",
+                fixes=[
+                    "Check for a string that evaluates itself, directly or indirectly (infinite eval recursion).",
+                    "Restructure the code so it doesn't need this many levels of nested eval().",
                 ],
             ),
         )

@@ -38,6 +38,7 @@ from blazelang.errors.error_handler import (
     InvalidAwaitError,
     ReflectExpectedFieldError,
     ReflectSourceTypeError,
+    EvalDepthExceededError,
 )
 from typing import Any, Callable, Dict, List
 import re
@@ -728,6 +729,11 @@ class BindValue:
 class Interpreter:
     """Tree-walking interpreter for BlazeLang"""
 
+    # Maximum nesting depth for eval()/evalFile() calling eval()/evalFile()
+    # again (directly or indirectly), guarding against infinite/runaway
+    # evaluation from a string that keeps re-evaluating itself.
+    MAX_EVAL_DEPTH = 50
+
     def __init__(self, module_registry=None, loading_modules=None, filename=None):
         self.global_scope = {}
         self.current_scope = self.global_scope
@@ -739,6 +745,7 @@ class Interpreter:
         self.loading_modules = loading_modules if loading_modules is not None else []
         self.current_exports = None
         self.call_stack = ["main()"]
+        self._eval_depth = 0
         self._register_builtins()
 
     def _register_builtins(self):
@@ -768,6 +775,8 @@ class Interpreter:
             'Float': self.builtin_Float,
             'String': self.builtin_String,
             'Bool': self.builtin_Bool,
+            'eval': self.builtin_eval,
+            'evalFile': self.builtin_evalFile,
         }
 
         for name, func in builtins.items():
@@ -1490,6 +1499,28 @@ class Interpreter:
                 array[idx] *= value
             elif node.operator == '/=':
                 array[idx] /= value
+            return value
+
+        # Bracket assignment into an object literal / map value, e.g.
+        # project["api-key"] = "new-key". The key is whatever the index
+        # expression evaluates to (normally a string) -- this mirrors
+        # visit_PropertyAssignment's dict branch exactly, so
+        # `obj["name"] = x` and `obj.name = x` behave identically.
+        if isinstance(array, dict):
+            if node.operator == '=':
+                array[index] = value
+            elif node.operator == '+=':
+                current = array.get(index, '')
+                array[index] = current + value
+            elif node.operator == '-=':
+                current = array.get(index, 0)
+                array[index] = current - value
+            elif node.operator == '*=':
+                current = array.get(index, 1)
+                array[index] = current * value
+            elif node.operator == '/=':
+                current = array.get(index, 1)
+                array[index] = current / value
             return value
 
         raise BlazeRuntimeError(f"Cannot assign to index of {type(array).__name__}")
@@ -2543,3 +2574,102 @@ class Interpreter:
 
     def builtin_Bool(self, value) -> bool:
         return self.is_truthy(value)
+
+    # =====================
+    # eval() / evalFile()
+    # =====================
+
+    def builtin_eval(self, *args) -> Any:
+        """`eval(sourceString)` -- parses `sourceString` as a single
+        BlazeLang expression and evaluates it in the *current* scope (the
+        same scope the `eval()` call itself is executing in), so it has
+        access to whatever variables, functions, classes, Structs, enums,
+        binds, properties, and methods are visible at that point -- exactly
+        like writing that expression inline would.
+
+        Reuses the same Lexer -> Parser -> Interpreter pipeline as the rest
+        of the language (no Python eval()/exec() involved: see
+        _run_eval_source / Parser.parse_single_expression), so every
+        expression form BlazeLang supports elsewhere -- arithmetic,
+        comparisons, boolean logic, string concatenation, indexing,
+        property/method access, function calls, nested eval(), ... -- is
+        automatically supported here too, with identical semantics and
+        identical diagnostics for invalid input. Trailing tokens after a
+        complete expression (`eval("10 + 20 garbage")`) are a ParserError,
+        never silently discarded.
+        """
+        if len(args) != 1:
+            raise ArgumentError('eval', 1, len(args))
+
+        source = args[0]
+        if not isinstance(source, str):
+            raise ArgumentError.for_type_mismatch('eval', 'string', source)
+
+        return self._run_eval_source(source)
+
+    def builtin_evalFile(self, *args) -> Any:
+        """`evalFile(path)` -- reads and executes a *complete* BlazeLang
+        file (statements, not just a single expression) through the same
+        Lexer -> Parser -> Interpreter pipeline, running it against this
+        same interpreter's current scope -- so top-level `var`/`Function`/
+        `Class`/`Struct`/`Enum` declarations in the evaluated file become
+        visible to the caller afterward, the same way running that file's
+        statements inline would. Subject to the same eval nesting-depth
+        guard as eval()."""
+        if len(args) != 1:
+            raise ArgumentError('evalFile', 1, len(args))
+
+        path = args[0]
+        if not isinstance(path, str):
+            raise ArgumentError.for_type_mismatch('evalFile', 'string', path)
+
+        try:
+            source = Path(path).read_text(encoding='utf-8')
+        except FileNotFoundError:
+            raise BlazeRuntimeError(f"evalFile(): file not found: '{path}'")
+        except OSError as exc:
+            raise BlazeRuntimeError(f"evalFile(): could not read '{path}': {exc}")
+
+        from blazelang.lexer.lexer import Lexer
+        from blazelang.parser.parser import Parser
+
+        self._enter_eval()
+        try:
+            tokens = Lexer(source, path).tokenize()
+            program = Parser(tokens).parse()
+            return self.visit(program)
+        finally:
+            self._exit_eval()
+
+    def _run_eval_source(self, source: str) -> Any:
+        """Shared `eval()` implementation: Lexer -> Parser.parse_single_expression()
+        -> Interpreter.visit(), under the nesting-depth guard. Kept
+        separate from builtin_eval so nested eval() calls (an expression
+        whose evaluation calls eval() again) and any future internal
+        callers share one depth-guarded code path."""
+        # Local import: avoids a module-level import cycle, since the
+        # lexer/parser modules are otherwise independent of the interpreter
+        # (matches the existing pattern in _load_module /
+        # _evaluate_embedded_expression).
+        from blazelang.lexer.lexer import Lexer
+        from blazelang.parser.parser import Parser
+
+        self._enter_eval()
+        try:
+            tokens = Lexer(source, self.filename or '<eval>').tokenize()
+            expr = Parser(tokens).parse_single_expression()
+            return self.visit(expr)
+        finally:
+            self._exit_eval()
+
+    def _enter_eval(self) -> None:
+        """Increment the eval nesting counter, raising once
+        MAX_EVAL_DEPTH would be exceeded -- the guard against a string
+        that (directly or through a chain of eval() calls) evaluates
+        itself forever."""
+        if self._eval_depth >= self.MAX_EVAL_DEPTH:
+            raise EvalDepthExceededError(self.MAX_EVAL_DEPTH, filename=self.filename)
+        self._eval_depth += 1
+
+    def _exit_eval(self) -> None:
+        self._eval_depth -= 1

@@ -1,0 +1,95 @@
+// ============================================================
+// BlazeLang eval() Beginner App
+// ============================================================
+//
+// eval() lets us run a BlazeLang expression stored inside a
+// string.
+//
+// Example:
+//     eval("10 + 20")
+// becomes:
+//     30
+//
+// This is useful when we don't know the expression beforehand.
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Calculator Function
+// ------------------------------------------------------------
+
+// Ask the user for an expression.
+//
+// The expression is stored as text, so we can use eval()
+// to calculate it.
+Function Calculate(expression) {
+
+    // eval() reads the string as a BlazeLang expression
+    // and returns the result.
+    return eval(expression)
+}
+
+
+// ------------------------------------------------------------
+// App Start
+// ------------------------------------------------------------
+
+Show("========================================")
+Show("       BlazeLang Eval Calculator")
+Show("========================================")
+
+
+// These are normal BlazeLang expressions stored as strings.
+var expression1 = "10 + 20"
+var expression2 = "50 * 2"
+var expression3 = "(100 + 50) / 3"
+
+
+// Send each expression to our calculator function.
+var result1 = Calculate(expression1)
+var result2 = Calculate(expression2)
+var result3 = Calculate(expression3)
+
+
+// ------------------------------------------------------------
+// Display Results
+// ------------------------------------------------------------
+
+Show("")
+Show("Expression: " + expression1)
+Show("Result: " + result1)
+
+Show("")
+Show("Expression: " + expression2)
+Show("Result: " + result2)
+
+Show("")
+Show("Expression: " + expression3)
+Show("Result: " + result3)
+
+
+// ------------------------------------------------------------
+// eval() Can Also Use Variables
+// ------------------------------------------------------------
+
+var x = 10
+var y = 5
+
+// eval() can access variables from the current scope.
+var answer = eval("x * y + 100")
+
+Show("")
+Show("Using variables:")
+Show("x = " + x)
+Show("y = " + y)
+Show("x * y + 100 = " + answer)
+
+
+// ------------------------------------------------------------
+// Finished
+// ------------------------------------------------------------
+
+Show("")
+Show("========================================")
+Show("          Calculator Complete!")
+Show("========================================")

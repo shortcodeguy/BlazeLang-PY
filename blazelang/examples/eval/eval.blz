@@ -1,0 +1,15 @@
+// Demonstrates BlazeLang's eval(): parses and evaluates a string as a
+// single BlazeLang expression, using the same Lexer -> Parser ->
+// Interpreter pipeline as the rest of the language (no Python eval()/
+// exec() involved), with full access to the current scope.
+
+var x = 10
+var y = 20
+
+Show(eval("x + y"))
+
+Function Add(a, b) {
+    return a + b
+}
+
+Show(eval("Add(5, 10)"))

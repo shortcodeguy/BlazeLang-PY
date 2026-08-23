@@ -1049,6 +1049,43 @@ class Parser:
     # Expression Parsing
     # =====================
     
+    def parse_single_expression(self):
+        """Public entry point for parsing a *single, complete* expression
+        out of a token stream with nothing else around it -- what `eval()`
+        uses to turn a source string into an expression AST.
+
+        Unlike the internal `parse_expression()` (the operator-precedence
+        entry point used everywhere inside statement/expression grammar,
+        which happily stops as soon as it has a valid expression and lets
+        its caller decide what comes next), this method requires there be
+        *nothing* left except EOF afterward -- so `eval("10 + 20 garbage")`
+        is a real ParserError instead of silently discarding "garbage".
+        """
+        try:
+            if self.current_token is None or self.current_token.type == TokenType.EOF:
+                raise ParserError("eval() requires a non-empty expression")
+
+            expr = self.parse_expression()
+
+            if self.current_token is not None and self.current_token.type != TokenType.EOF:
+                raise ParserError(
+                    f"Unexpected token after expression: {self.current_token.type.name} "
+                    f"(eval() accepts exactly one expression, with no trailing tokens)",
+                    self.current_token.line, self.current_token.column, self.current_token.filename
+                )
+
+            return expr
+        except ParserError as error:
+            # Mirrors parse()'s enrichment so an eval() ParserError gets the
+            # same filename/line/column completion a top-level parse error does.
+            if not error.filename:
+                token = self.current_token
+                error.filename = self.filename
+                error.line = error.line or (token.line if token else None)
+                error.column = error.column or (token.column if token else None)
+                error.args = (error.format_error(),)
+            raise
+
     def parse_expression(self):
         """Parse an expression starting from lowest precedence"""
         return self.parse_logical_or()
@@ -1459,25 +1496,52 @@ class Parser:
         self.expect(TokenType.RBRACKET)
         return ArrayLiteral(elements=elements)
     
+    def _expect_object_literal_key(self):
+        """Expect an object-literal key token: either IDENTIFIER (`name:`)
+        or STRING (`"name":`). Kept separate from the general-purpose
+        `expect()` (which only matches a single token type) so no existing
+        call site is affected."""
+        if self.current_token and self.current_token.type in (TokenType.IDENTIFIER, TokenType.STRING):
+            token = self.current_token
+            self.advance()
+            return token
+
+        found = self.current_token.type.name if self.current_token else 'EOF'
+        line = self.current_token.line if self.current_token else 0
+        col = self.current_token.column if self.current_token else 0
+
+        raise ParserError(
+            f"Expected an object key (identifier or string), but found {found}",
+            line, col
+        )
+
     def parse_object_literal(self):
-        """Parse object literal"""
+        """Parse object literal.
+
+        Keys may be a bare IDENTIFIER (`name: "BlazeLang"`) or a STRING
+        literal (`"name": "BlazeLang"`) -- both forms produce the exact same
+        string key internally (`"name"`), so `obj.name` and `obj["name"]`
+        always resolve to whatever was written under either spelling.
+        Quoted keys are what let you use a key that isn't a valid
+        identifier, e.g. `"api-key"` or a reserved word like `"if"`.
+        """
         self.advance()  # Skip {
-        
+
         properties = {}
         if not self.match(TokenType.RBRACE):
-            key_token = self.expect(TokenType.IDENTIFIER)
+            key_token = self._expect_object_literal_key()
             self.expect(TokenType.COLON)
             value = self.parse_expression()
             properties[key_token.value] = value
-            
+
             while self.match(TokenType.COMMA):
                 self.advance()  # Skip comma
                 if self.match(TokenType.RBRACE):
                     break  # Allow trailing comma
-                key_token = self.expect(TokenType.IDENTIFIER)
+                key_token = self._expect_object_literal_key()
                 self.expect(TokenType.COLON)
                 value = self.parse_expression()
                 properties[key_token.value] = value
-        
+
         self.expect(TokenType.RBRACE)
         return ObjectLiteral(properties=properties)

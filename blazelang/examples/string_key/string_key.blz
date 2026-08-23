@@ -1,0 +1,19 @@
+var project = {
+    "name": "BlazeLang",
+    "api-key": "sk-example",
+    "active": "true",
+    "version": "1.9",
+    "releases": ["1.0", "1.7", "1.9"],
+
+    "settings": {
+        "debug": "true",
+        "build-type": "release"
+    }
+}
+
+Show(project.name)
+Show(project["api-key"])
+Show(project.active)
+Show(project.releases[2])
+Show(project.settings.debug)
+Show(project.settings["build-type"])
