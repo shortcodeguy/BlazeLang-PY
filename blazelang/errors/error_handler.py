@@ -4,6 +4,7 @@ Provides detailed error messages with source code context
 """
 
 from typing import Optional, List, Sequence
+import re
 import os
 import sys
 from difflib import get_close_matches
@@ -78,6 +79,9 @@ class BlazeError(Exception):
         self.hint = hint
         self.note = note
         self.call_stack: List[str] = []
+        # Python's exception chaining remains the source of truth, but this
+        # stable attribute lets formatters and embedding hosts inspect it.
+        self.cause = None
         super().__init__(self.format_error())
 
     def default_code(self, message: str) -> str:
@@ -90,6 +94,8 @@ class BlazeError(Exception):
         self.filename = self.filename or filename
         if call_stack and not self.call_stack:
             self.call_stack = list(call_stack)
+        if self.cause is None:
+            self.cause = self.__cause__ or self.__context__
         self.args = (self.format_error(),)
 
     def format_error(self) -> str:
@@ -1654,6 +1660,25 @@ class InternalInterpreterError(BlazeError):
         )
 
 
+class NativeModuleError(RuntimeError):
+    """A host/native implementation failed while servicing BlazeLang code.
+
+    This deliberately uses the established general runtime code (BLZ2001):
+    native modules are part of runtime execution, and adding a new public
+    error code would break consumers that group runtime diagnostics by code.
+    """
+
+    def __init__(self, operation: str, cause: Exception = None, line: int = None,
+                 column: int = None, filename: str = None):
+        detail = str(cause).strip() if cause else "native operation failed"
+        super().__init__(
+            f"Native operation '{operation}' failed: {detail}", line, column, filename,
+            code="BLZ2001",
+            hint="Check the arguments passed to the native module and any file or resource it uses.",
+        )
+        self.cause = cause
+
+
 # --- Warning Diagnostics ---
 # The parser emits static warnings as plain (line, column, message) tuples,
 # where the BLZW code is embedded in the message text, e.g.
@@ -1852,8 +1877,7 @@ class ErrorFormatter:
         )
 
         title = f"BlazeLang [{error.code}] {type(error).__name__}"
-        bar = "=" * 56
-        lines = [f"{red}{bar}", title, f"{bar}{reset}", "", error.message]
+        lines = [f"{red}{title}{reset}", "", error.message]
 
         if error.filename or error.line is not None:
             lines.extend([
@@ -1864,11 +1888,24 @@ class ErrorFormatter:
                 f"Column : {error.column if error.column is not None else '?'}",
             ])
 
-        if source_code and error.line and 1 <= error.line <= len(source_code.splitlines()):
-            source_line = source_code.splitlines()[error.line - 1]
-            col = error.column or 1
-            pointer = f"{' ' * (len(str(error.line)) + 3 + max(0, col - 1))}{yellow}^{reset}"
-            lines.extend(["", f"{error.line} | {source_line}", pointer])
+        if source_code and error.line:
+            source_lines = source_code.splitlines()
+            if 1 <= error.line <= len(source_lines):
+                first, last = max(1, error.line - 1), min(len(source_lines), error.line + 1)
+                gutter = len(str(last))
+                lines.append("")
+                for number in range(first, last + 1):
+                    marker = ">" if number == error.line else " "
+                    lines.append(f"{marker} {number:>{gutter}} | {source_lines[number - 1]}")
+                    if number == error.line:
+                        column = max(1, error.column or 1)
+                        # Highlight an identifier/property when the message
+                        # names one; otherwise keep the familiar one-caret
+                        # diagnostic. Tabs are preserved for alignment.
+                        match = re.search(r"'([^']+)'", error.message)
+                        width = len(match.group(1)) if match else 1
+                        prefix = source_lines[number - 1][:column - 1].replace("\t", "    ")
+                        lines.append(f"  {' ' * gutter} | {prefix}{yellow}{'^' * max(1, width)}{reset}")
 
         if error.note:
             lines.extend(["", f"{cyan}Note{reset}", error.note])
@@ -1880,5 +1917,7 @@ class ErrorFormatter:
         if error.call_stack:
             lines.extend(["", f"{cyan}Call Stack{reset}"] + [f"  at {frame}" for frame in error.call_stack])
 
-        lines.append(f"{red}{bar}{reset}")
+        cause = getattr(error, "cause", None) or error.__cause__
+        if cause:
+            lines.extend(["", f"{cyan}Caused By{reset}", f"{type(cause).__name__}: {cause}"])
         return "\n".join(lines)

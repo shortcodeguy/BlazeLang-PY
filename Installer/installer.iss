@@ -68,22 +68,6 @@ Source: "BlazeLang-Terminal.json"; \
     Flags: ignoreversion
 
 ; ============================================================
-; Documentation
-; ============================================================
-
-Source: "README.md"; \
-    DestDir: "{app}"; \
-    Flags: ignoreversion
-
-Source: "BLAZELANG_REFERENCE.md"; \
-    DestDir: "{app}"; \
-    Flags: ignoreversion
-
-Source: "WINDOWS_COMMANDS.md"; \
-    DestDir: "{app}"; \
-    Flags: ignoreversion
-
-; ============================================================
 ; BlazeLang icon
 ; ============================================================
 

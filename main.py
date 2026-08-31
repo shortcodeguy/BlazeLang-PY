@@ -284,8 +284,11 @@ def main():
             from blazelang.package import create_package, PackageError
             output = create_package(sys.argv[2])
             print(f"Created package: {output}")
-        except (OSError, PackageError) as error:
-            print(f"Error: {error}")
+        except PackageError as error:
+            print_compiler_error(error)
+            sys.exit(1)
+        except OSError as error:
+            print_compiler_error(InternalInterpreterError(str(error)), None)
             sys.exit(1)
 
     elif command == "install":
@@ -296,8 +299,11 @@ def main():
             from blazelang.package import install_github_package, PackageError
             metadata = install_github_package(sys.argv[2])
             print(f"Installed {metadata['name']}@{metadata.get('version', '0.0.0')}")
-        except (OSError, PackageError) as error:
-            print(f"Error: {error}")
+        except PackageError as error:
+            print_compiler_error(error)
+            sys.exit(1)
+        except OSError as error:
+            print_compiler_error(InternalInterpreterError(str(error)), None)
             sys.exit(1)
 
     else:

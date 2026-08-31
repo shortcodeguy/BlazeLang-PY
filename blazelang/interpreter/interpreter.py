@@ -29,6 +29,7 @@ from blazelang.errors.error_handler import (
     DuplicateEnumValueError,
     EnumValueNotFoundError,
     ArgumentError,
+    NativeModuleError,
     ValueError as BlazeValueError,
     InvalidBindDeclarationError,
     BindMetadataAccessError,
@@ -1744,9 +1745,16 @@ class Interpreter:
         if isinstance(callee, BoundMethod):
             return callee(self, arguments)
 
-        # Handle built-in Python callables
+        # Handle built-in Python callables.  Native extensions and Python
+        # helpers must never leak raw host exceptions into BlazeLang output.
         if callable(callee) and not isinstance(callee, Function) and not isinstance(callee, Class):
-            return callee(*arguments)
+            try:
+                return callee(*arguments)
+            except BlazeError:
+                raise
+            except Exception as error:
+                operation = getattr(node.callee, 'property', None) or getattr(node.callee, 'name', None) or type(callee).__name__
+                raise NativeModuleError(operation, error) from error
 
         # Handle BlazeLang functions
         if isinstance(callee, Function):
@@ -2047,7 +2055,8 @@ class Interpreter:
         if node.property in BindValue.METADATA_PROPERTIES:
             raise BindMetadataAccessError(node.property, type(obj).__name__)
 
-        raise PropertyError(node.property, type(obj).__name__)
+        known_properties = [name for name in dir(obj) if not name.startswith('_')]
+        raise PropertyError(node.property, type(obj).__name__, known_properties=known_properties)
 
     def visit_ArrayAccess(self, node: ArrayAccess) -> Any:
         array = self.visit(node.array)
@@ -2118,6 +2127,8 @@ class Interpreter:
             self._import_convert(node)
         elif module_name == 'tensor':
             self._import_tensor(node)
+        elif module_name == 'image':
+            self._import_image(node)
         else:
             try:
                 exports = self._load_module(module_name)
@@ -2473,6 +2484,11 @@ class Interpreter:
     def _import_tensor(self, node):
         from blazelang.stdlib.tensor import create_tensor_module
         self._import_standard_module(node, create_tensor_module(), "tensor")
+
+    def _import_image(self, node):
+        from blazelang.stdlib.image import create_image_module
+        base_dir = Path(self.filename).parent if self.filename else Path.cwd()
+        self._import_standard_module(node, create_image_module(base_dir), "image")
 
     def _import_httpserver(self, node):
         from blazelang.stdlib.httpserver import create_httpserver_module

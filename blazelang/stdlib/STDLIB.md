@@ -14,5 +14,6 @@ All built-in modules use `Import Name from "module"` or `Import * as Name from "
 | File | See [FILE.md](FILE.md). | UTF-8, source-file-relative file operations; `BLZ5001`. |
 | Http | See [HTTP.md](HTTP.md). | HTTP responses and uploads/downloads; `BLZ4001`. |
 | Json | See [JSON.md](JSON.md). | Parse, stringify, pretty-print, validate; `BLZ6001`. |
+| Image | `Image.Create(width,height)`, `Image.Open(path)`, then `Resize`, `Crop`, `Rotate`, `FlipHorizontal`, `FlipVertical`, `Grayscale`, `Invert`, `Blur`, `Sharpen`, pixel and drawing methods, and `Save(path)`. | PNG, JPG/JPEG, and BMP. Images are held as RGBA; PNG preserves alpha. Paths are relative to the Blaze source file. |
 
 Best practices: validate external input, use `Path.Join` rather than manually inserting separators, create directories before `File.Write` or `Http.Download`, and avoid calling `System.Exit` from reusable functions.

@@ -9,6 +9,7 @@ import struct
 import tempfile
 import urllib.request
 import zlib
+from blazelang.errors.error_handler import BlazeError
 
 MAGIC = b"BLZP\x00"
 VERSION = 1
@@ -33,8 +34,14 @@ _INDEX_CACHE: dict | None = None
 _MANIFEST_CACHE: dict[Path, dict] = {}
 
 
-class PackageError(ValueError):
-    pass
+class PackageError(BlazeError, ValueError):
+    """Package failures keep their Python catch compatibility and gain a CLI diagnostic."""
+
+    def __init__(self, message: str):
+        BlazeError.__init__(
+            self, f"Package Error: {message}", code="BLZ3002",
+            hint="Check the package manifest, archive integrity, and package path.",
+        )
 
 
 def _safe_name(name: str) -> str:

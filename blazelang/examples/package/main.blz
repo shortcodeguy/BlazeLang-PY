@@ -1,6 +1,6 @@
 // BlazeLang package API showcase
 //
-// Create the binary package from this directory:
+// Create the package from this directory:
 //   blz package main.blz
 //
 // Publish hello-package.blzp to GitHub, then install it with:
