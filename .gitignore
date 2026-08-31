@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.pyc
+.blaze/
 .venv/
 venv/
 

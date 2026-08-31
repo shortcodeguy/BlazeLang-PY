@@ -1,0 +1,118 @@
+// ============================================================
+// BlazeLang LocalStorage Feature Test
+// ============================================================
+//
+// Tests:
+//   Save.LocalStorage()
+//   Load.LocalStorage()
+//   Exists.LocalStorage()
+//   Delete.LocalStorage()
+//   List.LocalStorage()
+//   Clear.LocalStorage()
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Clear Previous Data
+// ------------------------------------------------------------
+
+// Remove old test data so every run starts clean.
+Clear.LocalStorage()
+
+
+// ------------------------------------------------------------
+// Save Data
+// ------------------------------------------------------------
+
+Save.LocalStorage("username", "Rohit")
+Save.LocalStorage("age", 12)
+Save.LocalStorage("language", "BlazeLang")
+
+Show("Data saved successfully.")
+
+
+// ------------------------------------------------------------
+// Load Data
+// ------------------------------------------------------------
+
+var username = Load.LocalStorage("username")
+var age = Load.LocalStorage("age")
+var language = Load.LocalStorage("language")
+
+Show("Username: " + username)
+Show("Age: " + age)
+Show("Language: " + language)
+
+
+// ------------------------------------------------------------
+// Exists
+// ------------------------------------------------------------
+
+Show("Username exists: " + Exists.LocalStorage("username"))
+Show("Unknown key exists: " + Exists.LocalStorage("unknown"))
+
+
+// ------------------------------------------------------------
+// List Keys
+// ------------------------------------------------------------
+
+var keys = List.LocalStorage()
+
+Show("")
+Show("Stored keys:")
+Show(keys)
+
+
+// ------------------------------------------------------------
+// Delete
+// ------------------------------------------------------------
+
+Delete.LocalStorage("age")
+
+Show("")
+Show("Age after delete: " + Load.LocalStorage("age"))
+Show("Age exists: " + Exists.LocalStorage("age"))
+
+
+// ------------------------------------------------------------
+// List After Delete
+// ------------------------------------------------------------
+
+var keysAfterDelete = List.LocalStorage()
+
+Show("")
+Show("Keys after deleting age:")
+Show(keysAfterDelete)
+
+
+// ------------------------------------------------------------
+// Clear Everything
+// ------------------------------------------------------------
+
+Clear.LocalStorage()
+
+Show("")
+Show("Storage cleared.")
+
+
+// ------------------------------------------------------------
+// Verify Clear
+// ------------------------------------------------------------
+
+Show("Username after clear: " + Load.LocalStorage("username"))
+Show("Username exists after clear: " + Exists.LocalStorage("username"))
+
+var finalKeys = List.LocalStorage()
+
+Show("Keys after clear:")
+Show(finalKeys)
+
+
+// ------------------------------------------------------------
+// Complete
+// ------------------------------------------------------------
+
+Show("")
+Show("========================================")
+Show("    LocalStorage Test Complete!")
+Show("========================================")

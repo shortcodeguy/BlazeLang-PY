@@ -1,7 +1,6 @@
 // ============================================================
-// fixes.blz - Runtime audit verification
+// bug_fix.blz - Runtime audit verification
 // Exercises every bug fixed in the audit. Run with:
-//   python main.py run blazelang/examples/bugsfixes/fixes.blz
 // ============================================================
 
 Import Json from "json"

@@ -48,6 +48,20 @@ import os
 from datetime import datetime
 from difflib import get_close_matches
 from builtins import ValueError as PyValueError
+from blazelang.stdlib.tensor import Tensor
+from blazelang.stdlib.persistence import build_localstorage_namespaces
+
+
+# Module-level tables are created once, not for every binary expression.
+_BINARY_OPERATORS = {
+    '-': lambda a, b: a - b, '*': lambda a, b: a * b,
+    '/': lambda a, b: a / b, '%': lambda a, b: a % b,
+    '**': lambda a, b: a ** b, '^': lambda a, b: a ** b,
+    '==': lambda a, b: a == b, '!=': lambda a, b: a != b,
+    '>': lambda a, b: a > b, '<': lambda a, b: a < b,
+    '>=': lambda a, b: a >= b, '<=': lambda a, b: a <= b,
+}
+_NO_FAST_PATH = object()
 
 
 class ReturnException(Exception):
@@ -746,6 +760,7 @@ class Interpreter:
         self.current_exports = None
         self.call_stack = ["main()"]
         self._eval_depth = 0
+        self._visitor_cache = {}
         self._register_builtins()
 
     def _register_builtins(self):
@@ -785,6 +800,18 @@ class Interpreter:
                 'constant': True
             }
 
+        # Save/Load/Delete/Exists/Clear/List.LocalStorage -- registered as
+        # namespace objects (rather than flat functions) so BlazeLang source
+        # can call e.g. `Save.LocalStorage("ai.epoch", 25)`. visit_PropertyAccess
+        # already falls back to plain `getattr` for any object it doesn't
+        # otherwise recognize, so no interpreter/parser changes beyond this
+        # registration are needed for the dotted call syntax to work.
+        for name, namespace in build_localstorage_namespaces().items():
+            self.global_scope[name] = {
+                'value': namespace,
+                'constant': True
+            }
+
     def interpret(self, node: ASTNode) -> Any:
         return self.visit(node)
 
@@ -792,8 +819,14 @@ class Interpreter:
         if node is None:
             return None
 
-        method_name = f'visit_{type(node).__name__}'
-        visitor = getattr(self, method_name, self.generic_visit)
+        # Cache resolution per interpreter (rather than on the AST node) so
+        # parsing once and executing that AST with another Interpreter remains
+        # correct. This avoids a string allocation/getattr in tight loops.
+        node_type = type(node)
+        visitor = self._visitor_cache.get(node_type)
+        if visitor is None:
+            visitor = getattr(self, f'visit_{node_type.__name__}', self.generic_visit)
+            self._visitor_cache[node_type] = visitor
         try:
             return visitor(node)
         except BlazeError as error:
@@ -905,6 +938,16 @@ class Interpreter:
     def visit_ForStatement(self, node: ForStatement) -> Any:
         iterable = self.visit(node.iterable)
 
+        # A very common numeric reduction has no observable per-iteration
+        # side effects except updating its accumulator.  Execute it directly
+        # instead of allocating a loop variable entry and dispatching three
+        # AST visitors per item.  The structural guard deliberately keeps all
+        # non-trivial loops (including break/continue and function calls) on
+        # the established general path.
+        fast_result = self._try_fast_numeric_accumulation(node, iterable)
+        if fast_result is not _NO_FAST_PATH:
+            return fast_result
+
         if isinstance(iterable, (list, range)):
             result = None
             for item in iterable:
@@ -936,6 +979,37 @@ class Interpreter:
             return result
 
         raise BlazeRuntimeError(f"Cannot iterate over {type(iterable).__name__}")
+
+    def _try_fast_numeric_accumulation(self, node, iterable):
+        """Run ``for i in range(...){ total += i }`` at Python speed.
+
+        This is intentionally narrow: it only accepts a one-statement body
+        whose right hand side is precisely the loop variable.  That makes the
+        optimization semantics-preserving even in the presence of mutable
+        scopes and user-defined functions.
+        """
+        if not isinstance(iterable, range) or len(node.body.statements) != 1:
+            return _NO_FAST_PATH
+        statement = node.body.statements[0]
+        # Older parser paths expose assignment expressions directly, while
+        # newer ones wrap ordinary expressions in ExpressionStatement.
+        assignment = statement.expression if isinstance(statement, ExpressionStatement) else statement
+        if (not isinstance(assignment, Assignment) or assignment.operator not in ('+=', '-=')
+                or not isinstance(assignment.value, Identifier)
+                or assignment.value.name != node.variable):
+            return _NO_FAST_PATH
+        scope = self.current_scope if assignment.name in self.current_scope else self.global_scope
+        entry = scope.get(assignment.name)
+        if entry is None or entry.get('constant') or isinstance(entry.get('value'), BindValue):
+            return _NO_FAST_PATH
+        current = entry['value']
+        if not isinstance(current, (int, float)) or isinstance(current, bool):
+            return _NO_FAST_PATH
+        # Python's C-level sum consumes range lazily and performs the same
+        # integer arithmetic BlazeLang exposes for this restricted form.
+        delta = sum(iterable)
+        entry['value'] = current + delta if assignment.operator == '+=' else current - delta
+        return entry['value']
 
     def visit_ForEachStatement(self, node: ForEachStatement) -> Any:
         return self.visit_ForStatement(node)
@@ -1523,6 +1597,29 @@ class Interpreter:
                 array[index] = current / value
             return value
 
+        if isinstance(array, Tensor):
+            # Only supports assigning through a full index (t[i] = x for a
+            # rank-1 Tensor, or after chaining sub-Tensor access); Tensor's
+            # own __setitem__ validates index rank/bounds/dtype and raises
+            # proper BlazeLang errors.
+            try:
+                if node.operator == '=':
+                    array[index] = value
+                else:
+                    current = array[index]
+                    op_fn = {
+                        '+=': lambda a, b: a + b,
+                        '-=': lambda a, b: a - b,
+                        '*=': lambda a, b: a * b,
+                        '/=': lambda a, b: a / b,
+                    }[node.operator]
+                    array[index] = op_fn(current, value)
+            except BlazeError:
+                raise
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot assign to Tensor index with {type(index).__name__}")
+            return value
+
         raise BlazeRuntimeError(f"Cannot assign to index of {type(array).__name__}")
 
     def visit_BinaryOperation(self, node: BinaryOperation) -> Any:
@@ -1561,24 +1658,11 @@ class Interpreter:
             except (TypeError, ValueError):
                 raise BlazeTypeError(f"Cannot apply operator '+' to {type(left).__name__} and {type(right).__name__}")
 
-        operations = {
-            '-': lambda a, b: a - b,
-            '*': lambda a, b: a * b,
-            '/': lambda a, b: a / b if b != 0 else (_ for _ in ()).throw(BlazeZeroDivisionError()),
-            '%': lambda a, b: a % b if b != 0 else (_ for _ in ()).throw(BlazeZeroDivisionError()),
-            '**': lambda a, b: a ** b,
-            '^': lambda a, b: a ** b,
-            '==': lambda a, b: a == b,
-            '!=': lambda a, b: a != b,
-            '>': lambda a, b: a > b,
-            '<': lambda a, b: a < b,
-            '>=': lambda a, b: a >= b,
-            '<=': lambda a, b: a <= b,
-        }
-
-        if node.operator in operations:
+        if node.operator in _BINARY_OPERATORS:
             try:
-                return operations[node.operator](left, right)
+                if node.operator in ('/', '%') and right == 0:
+                    raise BlazeZeroDivisionError()
+                return _BINARY_OPERATORS[node.operator](left, right)
             except BlazeError:
                 raise
             except (TypeError, ValueError):
@@ -1969,6 +2053,17 @@ class Interpreter:
         if isinstance(array, dict):
             return array.get(index)
 
+        if isinstance(array, Tensor):
+            # t[i] on a rank>1 Tensor returns a sub-Tensor view; chained
+            # bracket access (t[i][j]) covers full multidimensional
+            # indexing without changing the single-index ArrayAccess grammar.
+            try:
+                return array[index]
+            except BlazeError:
+                raise
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot index into Tensor with {type(index).__name__}")
+
         raise BlazeRuntimeError(f"Cannot index into {type(array).__name__}")
 
     def visit_ThisExpression(self, node: ThisExpression) -> Any:
@@ -2014,6 +2109,8 @@ class Interpreter:
             self._import_gui(node)
         elif module_name == 'convert':
             self._import_convert(node)
+        elif module_name == 'tensor':
+            self._import_tensor(node)
         else:
             try:
                 exports = self._load_module(module_name)
@@ -2068,6 +2165,13 @@ class Interpreter:
 
     def _load_module(self, module_name):
         path = self._resolve_module_path(module_name)
+        if not path.is_file():
+            # Installed packages are addressed by their package name and are
+            # materialized lazily into the private package cache on import.
+            from blazelang.package import materialize_installed_module
+            installed = materialize_installed_module(module_name)
+            if installed is not None:
+                path = installed
         key = str(path)
         if key in self.module_registry:
             return self.module_registry[key]
@@ -2350,6 +2454,10 @@ class Interpreter:
         from blazelang.stdlib.convert import create_convert_module
         self._import_standard_module(node, create_convert_module(), "convert")
 
+    def _import_tensor(self, node):
+        from blazelang.stdlib.tensor import create_tensor_module
+        self._import_standard_module(node, create_tensor_module(), "tensor")
+
     def _import_httpserver(self, node):
         from blazelang.stdlib.httpserver import create_httpserver_module
 
@@ -2458,14 +2566,15 @@ class Interpreter:
     def builtin_len(self, obj) -> int:
         return len(obj)
 
-    def builtin_range(self, *args) -> list:
+    def builtin_range(self, *args) -> range:
+        """Return Python's compact lazy range instead of a materialized list."""
         if len(args) == 1:
-            return list(range(int(args[0])))
+            return range(int(args[0]))
         elif len(args) == 2:
-            return list(range(int(args[0]), int(args[1])))
+            return range(int(args[0]), int(args[1]))
         elif len(args) == 3:
-            return list(range(int(args[0]), int(args[1]), int(args[2])))
-        return []
+            return range(int(args[0]), int(args[1]), int(args[2]))
+        return range(0)
 
     def builtin_type(self, obj) -> str:
         if isinstance(obj, BlazeFuture):

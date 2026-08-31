@@ -1,3 +1,0 @@
-"""
-Runtime environment for BlazeLang
-"""

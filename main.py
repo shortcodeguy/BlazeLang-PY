@@ -206,6 +206,8 @@ def main():
         print("  run <file>       Run a BlazeLang file")
         print("  tokenize <file>  Show tokens for a file")
         print("  parse <file>     Show AST for a file")
+        print("  package <main>   Create a .blzp package")
+        print("  install <repo>   Install a GitHub package (owner/repo)")
         print("  version          Show version information")
         print("  help             Show this help message")
         print()
@@ -234,6 +236,8 @@ def main():
         print("  run <file>       Run a BlazeLang file")
         print("  tokenize <file>  Show tokens for a file")
         print("  parse <file>     Show AST for a file")
+        print("  package <main>   Create a .blzp package")
+        print("  install <repo>   Install a GitHub package (owner/repo)")
         print("  version          Show version information")
         print("  help             Show this help message")
         print()
@@ -271,6 +275,30 @@ def main():
         filename = sys.argv[2]
         source = load_source(filename)
         parse_file(filename, source)
+
+    elif command == "package":
+        if len(sys.argv) != 3:
+            print("Error: Usage: blz package main.blz")
+            return
+        try:
+            from blazelang.package import create_package, PackageError
+            output = create_package(sys.argv[2])
+            print(f"Created package: {output}")
+        except (OSError, PackageError) as error:
+            print(f"Error: {error}")
+            sys.exit(1)
+
+    elif command == "install":
+        if len(sys.argv) != 3:
+            print("Error: Usage: blz install githubuser/repo")
+            return
+        try:
+            from blazelang.package import install_github_package, PackageError
+            metadata = install_github_package(sys.argv[2])
+            print(f"Installed {metadata['name']}@{metadata.get('version', '0.0.0')}")
+        except (OSError, PackageError) as error:
+            print(f"Error: {error}")
+            sys.exit(1)
 
     else:
         print(f"Error: Unknown command '{command}'")

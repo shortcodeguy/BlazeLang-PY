@@ -48,6 +48,38 @@ class Parser:
         """Attach source coordinates without expanding every AST dataclass."""
         node.line, node.column, node.filename = token.line, token.column, token.filename
         return node
+
+    @staticmethod
+    def _binary(left, operator, right, token=None):
+        """Fold deterministic literal arithmetic during parsing.
+
+        Division/modulo by zero stay as AST operations so they retain their
+        established BlazeLang runtime diagnostic rather than becoming parser
+        errors.  All other folds use Python's same primitive semantics.
+        """
+        literal_types = (NumberLiteral, StringLiteral, BooleanLiteral)
+        if isinstance(left, literal_types) and isinstance(right, literal_types):
+            try:
+                a, b = left.value, right.value
+                if operator == '+': value = str(a) + str(b) if isinstance(a, str) or isinstance(b, str) else a + b
+                elif operator == '-': value = a - b
+                elif operator == '*': value = a * b
+                elif operator == '/' and b != 0: value = a / b
+                elif operator == '%' and b != 0: value = a % b
+                elif operator in ('**', '^'): value = a ** b
+                elif operator == '==': value = a == b
+                elif operator == '!=': value = a != b
+                elif operator == '>': value = a > b
+                elif operator == '<': value = a < b
+                elif operator == '>=': value = a >= b
+                elif operator == '<=': value = a <= b
+                else: raise ValueError
+                node = BooleanLiteral(value) if isinstance(value, bool) else (StringLiteral(value) if isinstance(value, str) else NumberLiteral(value))
+                return Parser._tag(node, token) if token else node
+            except (TypeError, ValueError, OverflowError):
+                pass
+        node = BinaryOperation(left=left, operator=operator, right=right)
+        return Parser._tag(node, token) if token else node
     
     def peek(self, offset: int = 1):
         """Look ahead without consuming"""
@@ -1098,11 +1130,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_logical_and()
-            left = BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            )
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     
@@ -1114,11 +1142,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_comparison()
-            left = BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            )
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     
@@ -1134,11 +1158,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_addition()
-            left = BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            )
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     
@@ -1150,11 +1170,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_multiplication()
-            left = self._tag(BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            ), operator_token)
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     
@@ -1166,11 +1182,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_power()
-            left = self._tag(BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            ), operator_token)
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     
@@ -1183,11 +1195,7 @@ class Parser:
             operator_token = self.current_token
             self.advance()
             right = self.parse_power()  # right-recursion => right-associative
-            left = self._tag(BinaryOperation(
-                left=left,
-                operator=operator_token.value,
-                right=right
-            ), operator_token)
+            left = self._binary(left, operator_token.value, right, operator_token)
         
         return left
     

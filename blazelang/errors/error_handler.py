@@ -1516,6 +1516,25 @@ class OSErrorBlaze(FileSystemError):
         self.args = (self.format_error(),)
 
 
+class StorageError(FileSystemError):
+    """Raised when BlazeLang's built-in LocalStorage (Save/Load/Delete/
+    Exists/Clear/List.LocalStorage) can't read or write its on-disk store,
+    including when the store file exists but is corrupted."""
+
+    def __init__(self, message: str, line: int = None, column: int = None, filename: str = None):
+        super().__init__(
+            message,
+            line,
+            column,
+            filename,
+            hint="LocalStorage keeps its data in a single JSON file. "
+                 "Check that the file is valid JSON and that BlazeLang has "
+                 "read/write access to it.",
+        )
+        self.code = "BLZ5006"
+        self.args = (self.format_error(),)
+
+
 class JSONError(BlazeError):
     """Raised when JSON parsing fails"""
 
@@ -1811,6 +1830,7 @@ class ErrorFormatter:
             "ModuleLoadError": "Check that the module is valid and all required files are available.",
             "FileExistsErrorBlaze": "Choose a different path or remove the existing file or directory first.",
             "OSErrorBlaze": "Check the filesystem path, permissions, and operating-system state.",
+            "StorageError": "Check that LocalStorage's JSON file is valid and that BlazeLang has read/write access to it.",
             "InvalidAwaitError": "Only 'await' the result of calling an 'async Function'.",
             "ReflectExpectedFieldError": "Add the missing field to the source data, or move it out of 'expect'.",
             "ReflectSourceTypeError": "'accept'/'expect'/'reject' only apply to objects or lists of objects.",

@@ -1,3 +1,0 @@
-"""
-Code formatter for BlazeLang
-"""
