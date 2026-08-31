@@ -1,0 +1,6 @@
+{
+  "name": "hello-package",
+  "version": "1.0.0",
+  "description": "My first BlazeLang package",
+  "main": "main.blz"
+}

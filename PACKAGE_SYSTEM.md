@@ -21,6 +21,7 @@ blz install githubuser/repo
 
 The installer finds the repository's `.blzp`, downloads it, validates it,
 installs declared GitHub dependencies recursively, and stores verified module
-files in BlazeLang's private `.blaze/packages` cache. Import a package by its
+files in `%LOCALAPPDATA%\BlazeLang\packages` (or `BLZ_PACKAGE_HOME` when set).
+Import a package by its
 `package.json` name; its `main` module is supplied to the existing import
 loader and its internal relative imports work normally.

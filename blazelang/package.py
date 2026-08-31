@@ -13,8 +13,16 @@ import zlib
 MAGIC = b"BLZP\x00"
 VERSION = 1
 HEADER = struct.Struct(">5sHQ32s")  # magic, version, compressed length, SHA-256
-ROOT = Path(__file__).resolve().parents[1]
-CACHE = ROOT / ".blaze" / "packages"
+# A one-file PyInstaller executable unpacks its code into a new temporary
+# directory each run.  Package installs therefore cannot live beside
+# ``__file__``: an install would disappear before the next ``blz run``.
+# LocalAppData is stable, user-writable, and shared by the installed CLI and
+# source checkout. BLZ_PACKAGE_HOME is provided for portable/test installs.
+_package_home = os.environ.get("BLZ_PACKAGE_HOME")
+if _package_home:
+    CACHE = Path(_package_home).expanduser().resolve()
+else:
+    CACHE = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".blaze"))) / "BlazeLang" / "packages"
 
 
 class PackageError(ValueError):
