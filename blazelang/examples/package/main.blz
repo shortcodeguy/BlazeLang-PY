@@ -1,3 +1,114 @@
-Export Function greet() {
-    Show("Hello from the package!")
+// BlazeLang package API showcase
+//
+// Create the binary package from this directory:
+//   blz package main.blz
+//
+// Publish hello-package.blzp to GitHub, then install it with:
+//   blz install githubuser/repo
+//
+// Consumer example:
+//   import greet from "hello-package"
+//   greet.developer()
+//   greet.User("Rohit").welcome()
+//   Show(greet.config.api.version)
+
+Export constant DEFAULT_GREETING = "Hello from BlazeLang!"
+Export var packageVersion = "1.0.0"
+
+Export Function greet(name) {
+    return "Hello " + name + "!"
 }
+
+// Classes and Structs can be exposed as values on the public API.
+Class User {
+    Constructor(name) {
+        this.name = name
+    }
+
+    Function welcome() {
+        return "Welcome " + this.name + "!"
+    }
+
+    Function developerGreeting() {
+        return "Hello Developer " + this.name + "!"
+    }
+}
+
+Struct PackageInfo {
+    name
+    version
+}
+
+// The default export is a complete API object. It can contain properties,
+// constants, functions, factory functions, nested namespaces, Classes, and
+// Structs. Every property supports normal chained member access and calls.
+var greetApi = {
+    name: "Hello Package",
+    version: packageVersion,
+    description: "A complete BlazeLang package API",
+
+    constants: {
+        defaultGreeting: DEFAULT_GREETING,
+        supported: ["functions", "objects", "classes", "structs", "factories"]
+    },
+
+    developer: function() {
+        Show("Hello Developer!")
+    },
+
+    user: function() {
+        Show("Hello User!")
+    },
+
+    formatGreeting: function(name) {
+        return greet(name)
+    },
+
+    // A factory can return another API object with methods that retain state.
+    User: function(name) {
+        return {
+            name: name,
+            welcome: function() {
+                Show("Welcome " + name + "!")
+            },
+            greeting: function() {
+                return greet(name)
+            }
+        }
+    },
+
+    // Class and Struct constructors are regular callable API values.
+    UserType: User,
+    PackageInfo: PackageInfo,
+    createInfo: function(name) {
+        return PackageInfo(name: name, version: packageVersion)
+    },
+
+    config: {
+        api: {
+            name: "hello-package-api",
+            version: "v1",
+            stable: true
+        },
+        install: {
+            command: "blz install githubuser/repo",
+            packageCommand: "blz package main.blz"
+        }
+    },
+
+    utils: {
+        format: function() {
+            return "hello-package@" + packageVersion
+        },
+        createNamespace: function(label) {
+            return {
+                label: label,
+                describe: function() {
+                    return "Namespace: " + label
+                }
+            }
+        }
+    }
+}
+
+Export Default greetApi

@@ -227,6 +227,9 @@ class HttpClient:
         options=None
     ):
 
+        if options is not None and not isinstance(options, dict):
+            return self._error_response("POST", str(url), "HTTP options must be an object")
+
         try:
 
             content = self._path(
@@ -242,16 +245,13 @@ class HttpClient:
             )
 
 
-        upload_options = dict(
-            options or {}
-        )
+        upload_options = dict(options or {})
 
 
-        headers = dict(
-            upload_options.get(
-                "headers"
-            ) or {}
-        )
+        raw_headers = upload_options.get("headers") or {}
+        if not isinstance(raw_headers, dict):
+            return self._error_response("POST", str(url), "HTTP option 'headers' must be an object")
+        headers = dict(raw_headers)
 
 
         headers.setdefault(
@@ -290,7 +290,14 @@ class HttpClient:
         include_raw=False
     ):
 
-        options = options or {}
+        # The public BlazeLang API promises a response object even when a
+        # request is malformed.  Validate options before accessing `.get()`
+        # so user input never leaks a raw Python AttributeError/TypeError.
+        if options is None:
+            options = {}
+        elif not isinstance(options, dict):
+            result = self._error_response(method, str(url), "HTTP options must be an object")
+            return (result, b"") if include_raw else result
 
 
         if not isinstance(
@@ -330,29 +337,25 @@ class HttpClient:
 
 
             # Existing headers object
-            raw_headers = options.get(
-                "headers"
-            ) or {}
+            raw_headers = options.get("headers") or {}
+
+            if not isinstance(raw_headers, dict):
+                raise ValueError("HTTP option 'headers' must be an object")
 
 
-            if isinstance(
-                raw_headers,
-                dict
-            ):
+            for key, value in raw_headers.items():
 
-                for key, value in raw_headers.items():
+                header_name = str(key)
 
-                    header_name = str(key)
-
-                    header_name = (
-                        self._normalize_header_name(
-                            header_name
-                        )
-                    )
-
-                    headers[
+                header_name = (
+                    self._normalize_header_name(
                         header_name
-                    ] = str(value)
+                    )
+                )
+
+                headers[
+                    header_name
+                ] = str(value)
 
 
             # ----------------------------------------------------
@@ -466,12 +469,10 @@ class HttpClient:
             )
 
 
-            timeout = (
-                max(
-                    0,
-                    float(timeout_ms)
-                ) / 1000
-            )
+            try:
+                timeout = max(0.001, float(timeout_ms) / 1000)
+            except (TypeError, ValueError):
+                raise ValueError("HTTP option 'timeout' must be a number of milliseconds")
 
 
             # ----------------------------------------------------
@@ -533,6 +534,7 @@ class HttpClient:
         except (
             URLError,
             ValueError,
+            TypeError,
             OSError
         ) as error:
 

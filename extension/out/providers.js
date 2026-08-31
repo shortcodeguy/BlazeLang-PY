@@ -44,10 +44,16 @@ const vscode = __importStar(require("vscode"));
 const builtins = {
     Show: 'Show(value, ...) — print values followed by a newline.', Print: 'Print(value, ...) — print values without a newline.', Input: 'Input(prompt) — read a line of terminal input.', len: 'len(value) — return collection or string length.', range: 'range(stop), range(start, stop), range(start, stop, step) — create an array of numbers.', type: 'type(value) — return a BlazeLang type name.', Int: 'Int(value) — convert to integer.', Float: 'Float(value) — convert to float.', String: 'String(value) — convert to string.', Bool: 'Bool(value) — convert to boolean.',
 };
-const keywords = { var: 'Declare a mutable variable.', constant: 'Declare an immutable variable.', bind: 'Declare a reactive bound variable.', Function: 'Declare a value-returning function.', Meta: 'Declare a no-return routine.', Class: 'Declare a class.', Struct: 'Declare a struct.', Enum: 'Declare an enum.', Import: 'Import a built-in or local module.', Export: 'Export a declaration from a module.', try: 'Start error-handling block.', throw: 'Raise a runtime error.' };
+const keywords = { var: 'Declare a mutable variable.', constant: 'Declare an immutable variable.', bind: 'Declare a reactive bound variable.', Function: 'Declare a value-returning function.', function: 'Create an anonymous function value for an object or package API.', Meta: 'Declare a no-return routine.', Class: 'Declare a class.', Struct: 'Declare a struct.', Enum: 'Declare an enum.', Import: 'Import a built-in or local module.', import: 'Import a package, local module, or standard module.', Export: 'Export a declaration from a module.', export: 'Export a named declaration or default API value.', default: 'Mark an export as the default package/module API.', try: 'Start error-handling block.', throw: 'Raise a runtime error.' };
 const standardModules = ['Math', 'Random', 'Date', 'Time', 'Path', 'System', 'Env', 'File', 'Http', 'Json', 'GUI', 'HttpServer', 'Convert'];
 const metaHooks = { OnCall: 'Meta hook invoked when the target function is called.', Before: 'Meta hook invoked before the target function body runs.', OnReturn: 'Meta hook invoked with the return value of the target function.', After: 'Meta hook invoked after the target function body runs.', OnError: 'Meta hook invoked when the target function throws.' };
 const bindProperties = { value: 'Current value of the bound variable.', previous: 'Value of the bound variable before its last change.', history: 'List of all previous values of the bound variable.', changes: 'Number of times the bound variable has changed.' };
+const moduleMembers = {
+    Http: { Get: 'GET request', Post: 'POST request', Put: 'PUT request', Patch: 'PATCH request', Delete: 'DELETE request', Head: 'HEAD request', Options: 'OPTIONS request', Download: 'Download a URL to a file', Upload: 'Upload a file' },
+    Json: { Parse: 'Parse JSON text', Stringify: 'Serialize a value as JSON' },
+    File: { Read: 'Read a file', Write: 'Write a file', Exists: 'Check whether a file exists' }
+};
+const responseMembers = { status: 'HTTP status code', statusText: 'HTTP status message', ok: 'True for a 2xx response', body: 'Decoded response body', headers: 'Response headers', url: 'Final response URL', method: 'HTTP method', error: 'Error message or null' };
 // Attributes BlazeLang code commonly declares/uses. This is a starting set
 // for completion only -- any other @name is still valid, just unrecognized.
 const knownAttributes = { logged: 'Logs each call to the attached function.', role: 'Restricts access to the attached function to a given role.', service: 'Associates the attached function/class with a named service.' };
@@ -72,6 +78,14 @@ function completionProvider(service) {
                 const symbol = service.symbols(document).find(s => s.name === dotMatch[1]);
                 if (symbol && symbol.detail && symbol.detail.startsWith('bind ')) {
                     return Object.entries(bindProperties).map(([name, detail]) => {
+                        const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Property);
+                        item.detail = detail;
+                        return item;
+                    });
+                }
+                const members = moduleMembers[dotMatch[1]] ?? (/(?:response|result|reply)$/i.test(dotMatch[1]) ? responseMembers : undefined);
+                if (members) {
+                    return Object.entries(members).map(([name, detail]) => {
                         const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Property);
                         item.detail = detail;
                         return item;
@@ -138,7 +152,7 @@ function hoverProvider(service) {
 function semanticProvider() {
     const legend = new vscode.SemanticTokensLegend(['keyword', 'class', 'function', 'method', 'variable', 'parameter', 'property', 'string', 'number', 'comment']);
     const token = { keyword: 0, class: 1, function: 2, variable: 4, comment: 9 };
-    return [{ provideDocumentSemanticTokens(document) { const builder = new vscode.SemanticTokensBuilder(legend); const declaration = /\b(Class|Struct|Enum|Function|Meta|var|constant|bind)\s+([A-Za-z_]\w*)/g; for (let line = 0; line < document.lineCount; line += 1) {
+    return [{ provideDocumentSemanticTokens(document) { const builder = new vscode.SemanticTokensBuilder(legend); const declaration = /\b(Class|Struct|Enum|Function|function|Meta|var|constant|bind)\s+([A-Za-z_]\w*)/g; for (let line = 0; line < document.lineCount; line += 1) {
                 const text = document.lineAt(line).text;
                 const comment = text.indexOf('//');
                 if (comment >= 0)

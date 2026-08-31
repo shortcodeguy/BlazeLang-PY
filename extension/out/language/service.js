@@ -35,9 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BlazeLanguageService = void 0;
 const vscode = __importStar(require("vscode"));
-const declaration = /\b(var|constant|bind|Function|Meta|Class|Struct|Enum)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-const importPattern = /^\s*Import\s+(?:(\w+)\s+from\s+|\*\s+as\s+(\w+)\s+from\s+|\{([^}]+)\}\s+from\s+)?["']?([^"'\s]+)["']?/;
-const keywords = new Set(['var', 'constant', 'bind', 'Function', 'Meta', 'Class', 'Struct', 'Enum', 'Constructor', 'if', 'else', 'while', 'for', 'in', 'return', 'Break', 'Continue', 'Import', 'Export', 'Default', 'from', 'as', 'try', 'catch', 'finally', 'throw', 'static', 'async', 'await', 'public', 'private', 'protected', 'override', 'this', 'super', 'and', 'or', 'not', 'true', 'false', 'null']);
+const declaration = /\b(var|constant|bind|Function|function|Meta|Class|Struct|Enum)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
+const importPattern = /^\s*(?:Import|import)\s+(?:(\w+)\s+(?:from)\s+|\*\s+(?:as)\s+(\w+)\s+(?:from)\s+|\{([^}]+)\}\s+(?:from)\s+)?["']?([^"'\s]+)["']?/i;
+const keywords = new Set(['var', 'constant', 'bind', 'Function', 'function', 'Meta', 'Class', 'Struct', 'Enum', 'Constructor', 'if', 'else', 'while', 'for', 'in', 'return', 'Break', 'Continue', 'Import', 'import', 'Export', 'export', 'Default', 'default', 'from', 'as', 'try', 'catch', 'finally', 'throw', 'static', 'async', 'await', 'public', 'private', 'protected', 'override', 'this', 'super', 'and', 'or', 'not', 'true', 'false', 'null']);
 
 // Recognized Meta hooks and Bind properties, used for completion/hover so we
 // never invent APIs that BlazeLang doesn't actually support.
@@ -61,6 +61,8 @@ class BlazeLanguageService {
         const diagnostics = [];
         const attributes = [];
         const braces = [];
+        const parentheses = [];
+        const brackets = [];
         let blockComment = false;
 
         // Scope-aware duplicate detection: each brace-delimited block (Class
@@ -140,6 +142,22 @@ class BlazeLanguageService {
                             scopeStack.pop();
                     }
                 }
+                if (char === '(')
+                    parentheses.push(new vscode.Position(lineNo, column));
+                if (char === ')') {
+                    if (parentheses.length === 0)
+                        diagnostics.push(this.diagnostic(lineNo, column, 1, 'BLZ1001', 'Unexpected closing parenthesis'));
+                    else
+                        parentheses.pop();
+                }
+                if (char === '[')
+                    brackets.push(new vscode.Position(lineNo, column));
+                if (char === ']') {
+                    if (brackets.length === 0)
+                        diagnostics.push(this.diagnostic(lineNo, column, 1, 'BLZ1001', 'Unexpected closing bracket'));
+                    else
+                        brackets.pop();
+                }
             }
             // Any declarations positioned at or past the end of the
             // structural code (should not normally happen, since matches
@@ -169,6 +187,11 @@ class BlazeLanguageService {
                 existing.push(range);
                 imports.set(module, existing);
                 [imported[1], imported[2]].filter(Boolean).forEach(name => symbols.push({ name: name, kind: 'import', range, selectionRange: range, detail: `Import from ${module}` }));
+                if (existing.length > 1)
+                    diagnostics.push(this.diagnostic(lineNo, start, module.length, 'BLZ1004', `Duplicate import of '${module}'`, vscode.DiagnosticSeverity.Warning));
+            }
+            else if (/^\s*(?:Import|import)\b/.test(code)) {
+                diagnostics.push(this.diagnostic(lineNo, 0, code.trim().length, 'BLZ1001', 'Invalid import syntax. Use import name from "module", import * as name from "module", or import { name } from "module".'));
             }
         }
 
@@ -180,6 +203,10 @@ class BlazeLanguageService {
             diag.source = 'BlazeLang';
             diagnostics.push(diag);
         }
+        for (const open of parentheses)
+            diagnostics.push(this.diagnostic(open.line, open.character, 1, 'BLZ1008', 'Unclosed parenthesis; missing closing ")"'));
+        for (const open of brackets)
+            diagnostics.push(this.diagnostic(open.line, open.character, 1, 'BLZ1008', 'Unclosed bracket; missing closing "]"'));
 
         const result = Object.assign({ symbols, imports, diagnostics, attributes }, { version: document.version });
         this.cache.set(document.uri.toString(), result);
@@ -191,7 +218,7 @@ class BlazeLanguageService {
     attributes(document) { return this.analyze(document).attributes; }
     wordRange(document, position) { return document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/); }
     isKeyword(word) { return keywords.has(word); }
-    symbolKind(word) { return { var: 'variable', constant: 'constant', bind: 'variable', Function: 'function', Meta: 'meta', Class: 'class', Struct: 'struct', Enum: 'enum' }[word] ?? 'variable'; }
+    symbolKind(word) { return { var: 'variable', constant: 'constant', bind: 'variable', Function: 'function', function: 'function', Meta: 'meta', Class: 'class', Struct: 'struct', Enum: 'enum' }[word] ?? 'variable'; }
 
     /** Find the custom attribute (if any) covering `position`, for hover/completion. */
     attributeAt(document, position) {

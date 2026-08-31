@@ -24,6 +24,14 @@ if _package_home:
 else:
     CACHE = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".blaze"))) / "BlazeLang" / "packages"
 
+# Installed packages are queried for every non-local import.  Keep the small
+# index and parsed manifests in memory for the lifetime of the CLI process;
+# cache_package() explicitly refreshes both after an install, so this never
+# returns stale data within a process that changes the package cache.
+_INDEX_CACHE_PATH: Path | None = None
+_INDEX_CACHE: dict | None = None
+_MANIFEST_CACHE: dict[Path, dict] = {}
+
 
 class PackageError(ValueError):
     pass
@@ -55,7 +63,13 @@ def create_package(main_file: str | Path) -> Path:
     except json.JSONDecodeError as exc:
         raise PackageError(f"Invalid package.json: {exc.msg}") from exc
     name = _safe_name(str(metadata.get("name", "")))
+    if not isinstance(metadata.get("version", "0.0.0"), str):
+        raise PackageError("package.json 'version' must be a string")
+    if "description" in metadata and not isinstance(metadata["description"], str):
+        raise PackageError("package.json 'description' must be a string")
     declared_main = metadata.get("main", main.name)
+    if not isinstance(declared_main, str) or not declared_main:
+        raise PackageError("package.json 'main' must be a non-empty .blz path")
     if _safe_relative(str(declared_main)) != main.relative_to(project).as_posix():
         raise PackageError("package.json 'main' must name the supplied main.blz")
     metadata["main"] = str(declared_main).replace("\\", "/")
@@ -118,11 +132,31 @@ def read_package(path: str | Path) -> dict:
 def _index_path() -> Path: return CACHE / "index.json"
 
 def _index() -> dict:
-    try: return json.loads(_index_path().read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError): return {}
+    global _INDEX_CACHE_PATH, _INDEX_CACHE
+    path = _index_path()
+    if _INDEX_CACHE_PATH == path and _INDEX_CACHE is not None:
+        return _INDEX_CACHE
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        result = {}
+    _INDEX_CACHE_PATH, _INDEX_CACHE = path, result
+    return result
+
+
+def _installed_manifest(path: Path) -> dict:
+    """Read an installed manifest once; cache_package invalidates it on update."""
+    manifest_path = path / "package.json"
+    cached = _MANIFEST_CACHE.get(manifest_path)
+    if cached is not None:
+        return cached
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    _MANIFEST_CACHE[manifest_path] = manifest
+    return manifest
 
 
 def cache_package(path: str | Path) -> dict:
+    global _INDEX_CACHE_PATH, _INDEX_CACHE
     document = read_package(path)
     meta = document["metadata"]
     target = CACHE / _safe_name(str(meta["name"])) / str(meta.get("version", "0.0.0"))
@@ -135,6 +169,8 @@ def cache_package(path: str | Path) -> dict:
     index = _index(); index[meta["name"]] = {"version": meta.get("version", "0.0.0"), "path": str(target)}
     CACHE.mkdir(parents=True, exist_ok=True)
     _index_path().write_text(json.dumps(index, indent=2), encoding="utf-8")
+    _INDEX_CACHE_PATH, _INDEX_CACHE = _index_path(), index
+    _MANIFEST_CACHE.pop(target / "package.json", None)
     return document
 
 
@@ -147,8 +183,9 @@ def materialize_installed_module(module_name: str) -> Path | None:
     record = _index().get(module_name)
     if not record: return None
     try:
-        meta = json.loads((Path(record["path"]) / "package.json").read_text(encoding="utf-8"))
-        main = Path(record["path"]) / _safe_relative(str(meta["main"]))
+        package_path = Path(record["path"])
+        meta = _installed_manifest(package_path)
+        main = package_path / _safe_relative(str(meta["main"]))
         return main.resolve() if main.is_file() else None
     except (OSError, KeyError, json.JSONDecodeError, PackageError):
         return None

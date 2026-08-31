@@ -1104,6 +1104,13 @@ class Interpreter:
         }
         return None
 
+    def visit_FunctionExpression(self, node: FunctionExpression) -> Function:
+        """Create a closure for an anonymous function stored in an API object."""
+        return Function(
+            name='<anonymous>', parameters=node.parameters, body=node.body,
+            closure=dict(self.current_scope),
+        )
+
     def visit_ClassDeclaration(self, node: ClassDeclaration) -> None:
         parent_cls = None
         if node.parent_class:
@@ -2128,6 +2135,10 @@ class Interpreter:
                 self._bind_import(node.default_name, exports['default'])
             elif node.namespace:
                 self._bind_import(node.namespace, dict(exports))
+            elif node.alias:
+                # Legacy `Import package as API` remains a namespace import
+                # for user packages just as it is for built-in modules.
+                self._bind_import(node.alias, dict(exports))
             elif node.bindings:
                 for exported, local in node.bindings:
                     if exported not in exports:
@@ -2140,15 +2151,20 @@ class Interpreter:
     def visit_ExportStatement(self, node: ExportStatement) -> None:
         if self.current_exports is None:
             raise BlazeRuntimeError("Export statements can only be used while loading a module")
-        self.visit(node.declaration)
-        name = getattr(node.declaration, 'name', None)
-        if not name or name not in self.current_scope:
-            raise BlazeRuntimeError("Exported declaration has no value")
-        export_name = 'default' if node.is_default else name
+        if node.value is not None:
+            if not node.is_default:
+                raise BlazeRuntimeError("Only default exports may be expressions")
+            export_name, value = 'default', self.visit(node.value)
+        else:
+            self.visit(node.declaration)
+            name = getattr(node.declaration, 'name', None)
+            if not name or name not in self.current_scope:
+                raise BlazeRuntimeError("Exported declaration has no value")
+            export_name, value = ('default' if node.is_default else name), self.current_scope[name]['value']
         if export_name in self.current_exports:
             message = "Only one default export is allowed." if node.is_default else f"Duplicate export '{name}'"
             raise BlazeImportError(message)
-        self.current_exports[export_name] = self.current_scope[name]['value']
+        self.current_exports[export_name] = value
         return None
 
     def _bind_import(self, name, value):

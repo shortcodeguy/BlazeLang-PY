@@ -143,6 +143,8 @@ class Parser:
                     raise ParserError("Only one default export is allowed.")
                 default_seen = True
                 continue
+            # Expression exports only exist for the default export and were
+            # handled above. Named exports still require a declaration name.
             name = getattr(statement.declaration, 'name', None)
             if name in names:
                 raise ParserError(f"Duplicate export '{name}'")
@@ -1048,6 +1050,9 @@ class Parser:
         elif self.match(TokenType.STRING):
             module = self.current_token.value
             self.advance()
+            if self.match(TokenType.AS):
+                self.advance()
+                alias = self.expect(TokenType.IDENTIFIER).value
         else:
             raise ParserError("Expected an import target", self.current_token.line, self.current_token.column)
         return ImportStatement(module=module, bindings=bindings, namespace=namespace,
@@ -1055,7 +1060,7 @@ class Parser:
                                line=import_token.line, column=import_token.column)
     
     def parse_export_statement(self):
-        """Parse an exported declaration, optionally the default export."""
+        """Parse an exported declaration or ``export default <expression>``."""
         self.advance()  # Skip Export
         is_default = self.match(TokenType.DEFAULT)
         if is_default:
@@ -1072,8 +1077,14 @@ class Parser:
             declaration = self.parse_class_declaration()
         elif self.match(TokenType.ENUM):
             declaration = self.parse_enum_declaration()
+        elif self.match(TokenType.STRUCT):
+            declaration = self.parse_struct_declaration()
+        elif is_default:
+            # A default export is a value, not necessarily a declaration.
+            # This permits `export default greet` and object/class factory APIs.
+            return ExportStatement(value=self.parse_expression(), is_default=True)
         else:
-            raise ParserError("Export must be followed by a variable, function, Meta, Class, or Enum declaration",
+            raise ParserError("Export must be followed by a declaration, or be `export default <expression>`",
                               self.current_token.line, self.current_token.column)
         return ExportStatement(declaration=declaration, is_default=is_default)
     
@@ -1349,6 +1360,10 @@ class Parser:
         # Object literals
         if token.type == TokenType.LBRACE:
             return self.parse_object_literal()
+
+        # Anonymous functions are values: `{ handler: function() { ... } }`.
+        if token.type == TokenType.FUNCTION:
+            return self.parse_function_expression()
         
         # Parenthesized expressions
         if token.type == TokenType.LPAREN:
@@ -1366,6 +1381,20 @@ class Parser:
             token.line,
             token.column
         )
+
+    def parse_function_expression(self):
+        """Parse a function literal (the value form has no name)."""
+        start_token = self.current_token
+        self.advance()
+        self.expect(TokenType.LPAREN)
+        parameters = []
+        if not self.match(TokenType.RPAREN):
+            parameters.append(self.expect(TokenType.IDENTIFIER).value)
+            while self.match(TokenType.COMMA):
+                self.advance()
+                parameters.append(self.expect(TokenType.IDENTIFIER).value)
+        self.expect(TokenType.RPAREN)
+        return self._tag(FunctionExpression(parameters=parameters, body=self.parse_block()), start_token)
     
     # =====================
     # Reflect Userdata

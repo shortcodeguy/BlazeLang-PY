@@ -256,6 +256,15 @@ class FunctionCall(ASTNode):
 
 
 @dataclass
+class FunctionExpression(ASTNode):
+    """An anonymous function value, used by object/package APIs."""
+    parameters: List[str]
+    body: BlockStatement
+    line: Optional[int] = None
+    column: Optional[int] = None
+
+
+@dataclass
 class ArrayLiteral(ASTNode):
     """Array literal [1, 2, 3]"""
     elements: List[Any] = field(default_factory=list)
@@ -308,7 +317,8 @@ class ImportStatement(ASTNode):
 @dataclass
 class ExportStatement(ASTNode):
     """An exported declaration."""
-    declaration: ASTNode
+    declaration: Optional[ASTNode] = None
+    value: Optional[Any] = None
     is_default: bool = False
 
 

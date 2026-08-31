@@ -1,0 +1,26 @@
+Import greet from "hello-package"
+
+greet.developer()
+greet.user()
+
+Show(greet.name)
+Show(greet.version)
+Show(greet.description)
+
+Show(greet.constants.defaultGreeting)
+Show(greet.constants.supported)
+
+Show(greet.formatGreeting("Rohit"))
+
+greet.User("Rohit").welcome()
+Show(greet.User("Rohit").greeting())
+
+Show(greet.config.api.name)
+Show(greet.config.api.version)
+Show(greet.config.api.stable)
+
+Show(greet.utils.format())
+
+var ns = greet.utils.createNamespace("Demo")
+Show(ns.label)
+Show(ns.describe())

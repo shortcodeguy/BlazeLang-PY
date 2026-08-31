@@ -1,10 +1,12 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from blazelang.interpreter.interpreter import Interpreter
 from blazelang.lexer.lexer import Lexer
+from blazelang import package
 from blazelang.package import CACHE, PackageError, cache_package, create_package, materialize_installed_module, read_package
 from blazelang.parser.parser import Parser
 
@@ -28,6 +30,97 @@ class RuntimeOptimizationTests(unittest.TestCase):
 
 
 class PackageTests(unittest.TestCase):
+    def test_installed_package_lookup_reuses_index_and_manifest_cache(self):
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "sample"; project.mkdir()
+            (project / "main.blz").write_text("Export var answer = 42", encoding="utf-8")
+            (project / "package.json").write_text(json.dumps({
+                "name": "cached-package", "version": "1.0.0", "main": "main.blz"
+            }), encoding="utf-8")
+            with patch("blazelang.package.CACHE", Path(temp) / "cache"):
+                cache_package(create_package(project / "main.blz"))
+                with patch.object(package.json, "loads", wraps=package.json.loads) as loads:
+                    self.assertIsNotNone(materialize_installed_module("cached-package"))
+                    self.assertIsNotNone(materialize_installed_module("cached-package"))
+                # The second lookup is entirely memory-backed.
+                self.assertEqual(loads.call_count, 1)
+    def test_package_default_api_supports_nested_members_and_chained_calls(self):
+        """A packaged default export is a normal BlazeLang object graph."""
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "hello-package"
+            project.mkdir()
+            (project / "main.blz").write_text("""
+Class PackageUser {
+    Constructor(name) { this.name = name }
+    Function welcome() { return "Class welcome " + this.name }
+}
+Struct PackageProfile { name }
+var greet = {
+    name: "Hello Package",
+    version: "1.0.0",
+    developer: function() { return "Hello Developer!" },
+    user: function() { return "Hello User!" },
+    config: { api: { version: "v1" } },
+    utils: { format: function() { return "formatted" } },
+    User: function(name) { return { welcome: function() { return "Welcome " + name + "!" } } },
+    UserType: PackageUser,
+    Profile: PackageProfile
+}
+export default greet
+""", encoding="utf-8")
+            (project / "package.json").write_text(json.dumps({
+                "name": "hello-package", "version": "1.0.0",
+                "description": "API package", "main": "main.blz", "dependencies": {}
+            }), encoding="utf-8")
+            archive = create_package(project / "main.blz")
+            with patch("blazelang.package.CACHE", Path(temp) / "cache"):
+                cache_package(archive)
+                consumer = Interpreter(filename=str(project / "consumer.blz"))
+                consumer.interpret(Parser(Lexer("""
+import greet from "hello-package"
+var a = greet.developer()
+var b = greet.user()
+var c = greet.name
+var d = greet.config.api.version
+var e = greet.utils.format()
+var f = greet.User("Rohit").welcome()
+var g = greet.UserType("Nina").welcome()
+var h = greet.Profile(name: "Asha").name
+""", str(project / "consumer.blz")).tokenize()).parse())
+            self.assertEqual(consumer.global_scope["a"]["value"], "Hello Developer!")
+            self.assertEqual(consumer.global_scope["b"]["value"], "Hello User!")
+            self.assertEqual(consumer.global_scope["c"]["value"], "Hello Package")
+            self.assertEqual(consumer.global_scope["d"]["value"], "v1")
+            self.assertEqual(consumer.global_scope["e"]["value"], "formatted")
+            self.assertEqual(consumer.global_scope["f"]["value"], "Welcome Rohit!")
+            self.assertEqual(consumer.global_scope["g"]["value"], "Class welcome Nina")
+            self.assertEqual(consumer.global_scope["h"]["value"], "Asha")
+
+    def test_package_keeps_optional_source_paths_and_named_exports(self):
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "api"; project.mkdir()
+            (project / "main.blz").write_text("Export var version = \"1.0\"", encoding="utf-8")
+            nested = project / "anything"; nested.mkdir()
+            (nested / "utils.blz").write_text("Export var helper = 1", encoding="utf-8")
+            (project / "package.json").write_text(json.dumps({
+                "name": "paths-package", "version": "1.0.0", "main": "main.blz",
+                "dependencies": {"other": "owner/other"}
+            }), encoding="utf-8")
+            archive = create_package(project / "main.blz")
+            document = read_package(archive)
+            self.assertEqual(document["metadata"]["dependencies"], {"other": "owner/other"})
+            self.assertIn("anything/utils.blz", document["modules"])
+            self.assertFalse((project / "modules").exists())
+            with patch("blazelang.package.CACHE", Path(temp) / "cache"):
+                cache_package(archive)
+                consumer = Interpreter(filename=str(project / "consumer.blz"))
+                consumer.interpret(Parser(Lexer(
+                    'import { version as apiVersion } from "paths-package"\n'
+                    'import "paths-package" as api', str(project / "consumer.blz")
+                ).tokenize()).parse())
+            self.assertEqual(consumer.global_scope["apiVersion"]["value"], "1.0")
+            self.assertEqual(consumer.global_scope["api"]["value"]["version"], "1.0")
+
     def test_binary_package_round_trip_and_import(self):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp) / "sample"
