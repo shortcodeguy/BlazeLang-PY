@@ -749,7 +749,7 @@ class Interpreter:
     # evaluation from a string that keeps re-evaluating itself.
     MAX_EVAL_DEPTH = 50
 
-    def __init__(self, module_registry=None, loading_modules=None, filename=None):
+    def __init__(self, module_registry=None, loading_modules=None, filename=None, cli_args=None):
         self.global_scope = {}
         self.current_scope = self.global_scope
         # Tracks which Class's method body is currently executing (None at top level
@@ -760,6 +760,7 @@ class Interpreter:
         self.loading_modules = loading_modules if loading_modules is not None else []
         self.current_exports = None
         self.call_stack = ["main()"]
+        self.cli_args = list(cli_args or [])
         self._eval_depth = 0
         self._visitor_cache = {}
         self._register_builtins()
@@ -2129,6 +2130,8 @@ class Interpreter:
             self._import_tensor(node)
         elif module_name == 'image':
             self._import_image(node)
+        elif module_name == 'cli':
+            self._import_cli(node)
         else:
             try:
                 exports = self._load_module(module_name)
@@ -2489,6 +2492,10 @@ class Interpreter:
         from blazelang.stdlib.image import create_image_module
         base_dir = Path(self.filename).parent if self.filename else Path.cwd()
         self._import_standard_module(node, create_image_module(base_dir), "image")
+
+    def _import_cli(self, node):
+        from blazelang.stdlib.cli import create_cli_module
+        self._import_standard_module(node, create_cli_module(self), "cli")
 
     def _import_httpserver(self, node):
         from blazelang.stdlib.httpserver import create_httpserver_module

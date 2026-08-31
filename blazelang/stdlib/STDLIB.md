@@ -15,5 +15,6 @@ All built-in modules use `Import Name from "module"` or `Import * as Name from "
 | Http | See [HTTP.md](HTTP.md). | HTTP responses and uploads/downloads; `BLZ4001`. |
 | Json | See [JSON.md](JSON.md). | Parse, stringify, pretty-print, validate; `BLZ6001`. |
 | Image | `Image.Create(width,height)`, `Image.Open(path)`, then `Resize`, `Crop`, `Rotate`, `FlipHorizontal`, `FlipVertical`, `Grayscale`, `Invert`, `Blur`, `Sharpen`, pixel and drawing methods, and `Save(path)`. | PNG, JPG/JPEG, and BMP. Images are held as RGBA; PNG preserves alpha. Paths are relative to the Blaze source file. |
+| CLI | `CLI.Create(name, description)`, `Command` (also available on a command for subcommands), `Argument`, `Option`, `Flag`, `Alias`, and `Run`. Context helpers: `Arguments`, `CurrentDirectory`, `ScriptPath`, `ExecutablePath`, `Exit(code)`. | Script arguments follow the `.blz` file: `blz run app.blz hello --name Rohit`. `--help`/`-h` and `--version`/`-V` are automatic; validation failures exit with code 1. See `examples/cli/cli.blz`. |
 
 Best practices: validate external input, use `Path.Join` rather than manually inserting separators, create directories before `File.Write` or `Http.Download`, and avoid calling `System.Exit` from reusable functions.

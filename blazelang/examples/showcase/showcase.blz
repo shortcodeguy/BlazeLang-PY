@@ -1,5 +1,12 @@
+// ============================================================
+// BlazeLang Mega Showcase
 // One practical tour of the language.
 // Use the focused examples for detail.
+// ============================================================
+
+// ============================================================
+// STANDARD LIBRARY
+// ============================================================
 
 Import Math from "math"
 Import Random from "random"
@@ -12,12 +19,31 @@ Import Json from "json"
 Import File from "file"
 Import Http from "http"
 Import HttpServer from "httpserver"
+Import Image from "image"
+Import CLI from "cli"
+
+// ============================================================
+// VERSION
+// ============================================================
 
 constant VERSION = "1.7"
 
+// ============================================================
+// VARIABLES & DATA
+// ============================================================
+
 var missing = null
-var name = Input("Name (press Enter to skip): ")
-var values = [1, 2, 3]
+
+var name = Input(
+    "Name (press Enter to skip): "
+)
+
+var values = [
+    1,
+    2,
+    3
+]
+
 var profile = {
     name: name,
     version: VERSION
@@ -25,12 +51,31 @@ var profile = {
 
 values[0] += 9
 
-Show("Hello " + profile.name + "; first = " + values[0])
-Show("Converted: " + String(Int("7")) + ", " + Float("2.5"))
+Show(
+    "Hello " +
+    profile.name +
+    "; first = " +
+    values[0]
+)
+
+Show(
+    "Converted: " +
+    String(Int("7")) +
+    ", " +
+    Float("2.5")
+)
+
+// ============================================================
+// NULL
+// ============================================================
 
 if missing == null {
     Show("null is supported")
 }
+
+// ============================================================
+// WHILE LOOP
+// ============================================================
 
 var sum = 0
 var cursor = 0
@@ -40,7 +85,12 @@ while cursor < 3 {
     cursor += 1
 }
 
+// ============================================================
+// FOR LOOP
+// ============================================================
+
 for number in range(0, 6) {
+
     if number == 1 {
         Continue
     }
@@ -52,7 +102,12 @@ for number in range(0, 6) {
     Show(number)
 }
 
+// ============================================================
+// FUNCTIONS & RECURSION
+// ============================================================
+
 Function Factorial(n) {
+
     if n <= 1 {
         return 1
     }
@@ -60,21 +115,43 @@ Function Factorial(n) {
     return n * Factorial(n - 1)
 }
 
-Show("factorial: " + Factorial(5))
+Show(
+    "factorial: " +
+    Factorial(5)
+)
+
+// ============================================================
+// ERROR HANDLING
+// ============================================================
 
 try {
+
     if sum == 3 {
         throw "demonstration error"
     }
+
 }
 catch (error) {
-    Show("caught: " + error)
+
+    Show(
+        "caught: " +
+        error
+    )
+
 }
 finally {
-    Show("finally runs")
+
+    Show(
+        "finally runs"
+    )
 }
 
+// ============================================================
+// CLASSES & INHERITANCE
+// ============================================================
+
 Class Parent {
+
     Constructor(label) {
         this.label = label
     }
@@ -85,6 +162,7 @@ Class Parent {
 }
 
 Class Child: Parent {
+
     private var secret = "inside"
 
     static Function Create(label) {
@@ -96,43 +174,278 @@ Class Child: Parent {
     }
 
     Function Describe() {
-        return super.Label() + " / " + this.secret
+        return (
+            super.Label() +
+            " / " +
+            this.secret
+        )
     }
 }
 
-var child = Child.Create("class and super")
+var child = Child.Create(
+    "class and super"
+)
 
-Show(child.Describe())
+Show(
+    child.Describe()
+)
+
+// ============================================================
+// STRUCTS
+// ============================================================
 
 Struct Point {
+
     x
     y
     tag = null
 }
 
-var point = Point(3, 4)
+var point = Point(
+    3,
+    4
+)
 
 point.x += 1
 
-Show(Json.Stringify(point))
+Show(
+    Json.Stringify(point)
+)
 
-Show(Math.Pow(2, 8))
-Show(Random.Int(1, 10))
-Show(Date.Today())
-Show(Time.Now())
-Show(Path.Join("examples", "mega"))
-Show(System.Platform())
+// ============================================================
+// STANDARD LIBRARY TESTS
+// ============================================================
 
-Env.Set("BLAZELANG_MEGA", "ready")
+Show(
+    Math.Pow(2, 8)
+)
 
-Show(Env.Get("BLAZELANG_MEGA"))
+Show(
+    Random.Int(1, 10)
+)
 
-File.Write("mega_example.txt", "temporary")
-Show(File.Read("mega_example.txt"))
-File.Delete("mega_example.txt")
+Show(
+    Date.Today()
+)
 
-Show("HTTP client available: " + type(Http))
-Show("HTTP server available: " + type(HttpServer))
+Show(
+    Time.Now()
+)
 
-Show("Meta lifecycle: see examples/meta/meta_showcase.blz")
-Show("========== MEGA SHOWCASE COMPLETE ==========")
+Show(
+    Path.Join(
+        "examples",
+        "mega"
+    )
+)
+
+Show(
+    System.Platform()
+)
+
+// ============================================================
+// ENVIRONMENT
+// ============================================================
+
+Env.Set(
+    "BLAZELANG_MEGA",
+    "ready"
+)
+
+Show(
+    Env.Get(
+        "BLAZELANG_MEGA"
+    )
+)
+
+// ============================================================
+// FILE SYSTEM
+// ============================================================
+
+File.Write(
+    "mega_example.txt",
+    "temporary"
+)
+
+Show(
+    File.Read(
+        "mega_example.txt"
+    )
+)
+
+File.Delete(
+    "mega_example.txt"
+)
+
+// ============================================================
+// HTTP
+// ============================================================
+
+Show(
+    "HTTP client available: " +
+    type(Http)
+)
+
+Show(
+    "HTTP server available: " +
+    type(HttpServer)
+)
+
+// ============================================================
+// IMAGE
+// Create an RGBA canvas, manipulate pixels,
+// draw shapes, then save.
+// ============================================================
+
+Show(
+    "========== IMAGE =========="
+)
+
+var canvas = Image.Create(
+    160,
+    100
+)
+
+canvas.Fill(
+    "#202020"
+)
+
+canvas.SetPixel(
+    10,
+    10,
+    255,
+    0,
+    0
+)
+
+canvas.DrawLine(
+    0,
+    0,
+    159,
+    99,
+    "#00D0FF"
+)
+
+canvas.DrawRect(
+    20,
+    20,
+    60,
+    30,
+    "#00FF88"
+)
+
+canvas.DrawCircle(
+    120,
+    50,
+    20,
+    "#FFD000"
+)
+
+canvas.DrawText(
+    25,
+    30,
+    "Blaze",
+    "#FFFFFF"
+)
+
+Show(
+    "Canvas: " +
+    canvas.width +
+    " x " +
+    canvas.height
+)
+
+Show(
+    canvas.GetPixel(
+        10,
+        10
+    )
+)
+
+canvas.Save(
+    "showcase_image.png"
+)
+
+var loadedImage = Image.Open(
+    "showcase_image.png"
+)
+
+Show(
+    "Loaded image width: " +
+    loadedImage.width
+)
+
+File.Delete(
+    "showcase_image.png"
+)
+
+// ============================================================
+// CLI
+// Applications receive arguments after the .blz path.
+// ============================================================
+
+Show(
+    "========== CLI =========="
+)
+
+var cli = CLI.Create(
+    "showcase",
+    "BlazeLang CLI application example"
+)
+
+cli.Command(
+    "greet",
+    "Greet a person",
+    function(args) {
+
+        Show(
+            "Hello, " +
+            args.name
+        )
+    }
+).Option(
+    "name",
+    "n",
+    "Name to greet",
+    true
+)
+
+Show(
+    "CLI arguments: " +
+    CLI.Arguments()
+)
+
+Show(
+    "CLI script: " +
+    CLI.ScriptPath()
+)
+
+Show(
+    "CLI working directory: " +
+    CLI.CurrentDirectory()
+)
+
+Show(
+    "Run with:"
+)
+
+Show(
+    "blz run showcase.blz greet --name Rohit"
+)
+
+// ============================================================
+// META
+// ============================================================
+
+Show(
+    "Meta lifecycle: see " +
+    "examples/meta/meta.blz"
+)
+
+// ============================================================
+// COMPLETE
+// ============================================================
+
+Show(
+    "========== SHOWCASE COMPLETE =========="
+)

@@ -1,0 +1,35 @@
+Import CLI from "cli"
+
+var cli = CLI.Create(
+    "myapp",
+    "My BlazeLang CLI"
+)
+
+cli.Command(
+    "hello",
+    "Say hello",
+    function(args) {
+        Show("Hello, " + args.name)
+    }
+).Option(
+    "name",
+    "n",
+    "Name to greet",
+    true
+)
+
+cli.Command(
+    "sum",
+    "Add two numbers",
+    function(args) {
+        Show(args.a + args.b)
+    }
+).Argument(
+    "a",
+    "First number"
+).Argument(
+    "b",
+    "Second number"
+)
+
+cli.Run()

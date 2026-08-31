@@ -1,10 +1,10 @@
 Import Image from "image"
 
 // ============================================================
-// BlazeLang Image Module Test
+// BlazeLang Image Module - Complete Showcase
 // ============================================================
 
-Show("========== IMAGE MODULE ==========")
+Show("========== BLAZELANG IMAGE MODULE ==========")
 
 // ============================================================
 // CREATE
@@ -18,12 +18,12 @@ Show(canvas.width)
 Show(canvas.height)
 
 // ============================================================
-// FILL
+// BACKGROUND
 // ============================================================
 
-Show("========== FILL ==========")
+Show("========== BACKGROUND ==========")
 
-canvas.Fill("#202020")
+canvas.Fill("#101820")
 
 // ============================================================
 // DRAWING
@@ -31,25 +31,53 @@ canvas.Fill("#202020")
 
 Show("========== DRAWING ==========")
 
-canvas.DrawLine(0, 0, 799, 599)
-
+// Border
 canvas.DrawRect(
-    50,
-    50,
-    200,
-    100
+    20,
+    20,
+    760,
+    560
+)
+
+// Decorative lines
+canvas.DrawLine(
+    20,
+    20,
+    780,
+    580
+)
+
+canvas.DrawLine(
+    780,
+    20,
+    20,
+    580
+)
+
+// Circles
+canvas.DrawCircle(
+    400,
+    300,
+    180
 )
 
 canvas.DrawCircle(
     400,
     300,
-    100
+    120
+)
+
+// BlazeLang title
+canvas.DrawText(
+    250,
+    285,
+    "BLAZELANG"
 )
 
 canvas.DrawText(
-    100,
-    200,
-    "Hello Blaze!"
+    330,
+    330,
+    "IMAGE MODULE"
 )
 
 // ============================================================
@@ -59,14 +87,17 @@ canvas.DrawText(
 Show("========== PIXELS ==========")
 
 canvas.SetPixel(
-    10,
-    10,
+    400,
+    300,
     255,
     0,
     0
 )
 
-var pixel = canvas.GetPixel(10, 10)
+var pixel = canvas.GetPixel(
+    400,
+    300
+)
 
 Show(pixel)
 
@@ -74,9 +105,11 @@ Show(pixel)
 // SAVE ORIGINAL
 // ============================================================
 
-Show("========== SAVE ==========")
+Show("========== SAVE ORIGINAL ==========")
 
-canvas.Save("image-original.png")
+canvas.Save(
+    "blazelang-original.png"
+)
 
 Show("Original image saved!")
 
@@ -86,7 +119,10 @@ Show("Original image saved!")
 
 Show("========== RESIZE ==========")
 
-canvas.Resize(400, 300)
+canvas.Resize(
+    600,
+    450
+)
 
 Show(canvas.width)
 Show(canvas.height)
@@ -109,7 +145,6 @@ Show(canvas.height)
 Show("========== FLIP ==========")
 
 canvas.FlipHorizontal()
-
 canvas.FlipVertical()
 
 // ============================================================
@@ -132,7 +167,9 @@ canvas.Sharpen()
 
 Show("========== SAVE PROCESSED ==========")
 
-canvas.Save("image-processed.png")
+canvas.Save(
+    "blazelang-processed.png"
+)
 
 Show("Processed image saved!")
 
@@ -140,20 +177,25 @@ Show("Processed image saved!")
 // OPEN IMAGE
 // ============================================================
 
-Show("========== OPEN ==========")
+Show("========== OPEN IMAGE ==========")
 
-var loaded = Image.Open("image-processed.png")
+var loaded = Image.Open(
+    "blazelang-processed.png"
+)
 
 Show(loaded.width)
 Show(loaded.height)
 
 // ============================================================
-// LOADED IMAGE PIXEL
+// READ LOADED PIXEL
 // ============================================================
 
 Show("========== LOADED PIXEL ==========")
 
-var loadedPixel = loaded.GetPixel(10, 10)
+var loadedPixel = loaded.GetPixel(
+    10,
+    10
+)
 
 Show(loadedPixel)
 
@@ -163,39 +205,49 @@ Show(loadedPixel)
 
 Show("========== SECOND IMAGE ==========")
 
-var second = Image.Create(256, 256)
+var second = Image.Create(
+    512,
+    512
+)
 
-second.Fill("#000000")
+second.Fill("#202020")
 
 second.DrawRect(
-    20,
-    20,
-    100,
-    100
+    50,
+    50,
+    412,
+    412
 )
 
 second.DrawCircle(
-    128,
-    128,
-    60
+    256,
+    256,
+    150
 )
 
 second.DrawLine(
-    0,
-    0,
-    255,
-    255
+    50,
+    50,
+    462,
+    462
+)
+
+second.DrawLine(
+    462,
+    50,
+    50,
+    462
 )
 
 second.DrawText(
-    50,
-    220,
+    170,
+    250,
     "BlazeLang"
 )
 
 second.SetPixel(
-    128,
-    128,
+    256,
+    256,
     255,
     0,
     0
@@ -204,20 +256,24 @@ second.SetPixel(
 Show(second.width)
 Show(second.height)
 
-second.Save("image-second.png")
+second.Save(
+    "blazelang-second.png"
+)
 
 // ============================================================
-// SECOND IMAGE FILTER TEST
+// SECOND IMAGE FILTER
 // ============================================================
 
-Show("========== SECOND FILTER TEST ==========")
+Show("========== SECOND FILTER ==========")
 
 second.Grayscale()
 
-second.Save("image-second-gray.png")
+second.Save(
+    "blazelang-second-gray.png"
+)
 
 // ============================================================
 // FINAL
 // ============================================================
 
-Show("========== IMAGE MODULE TEST COMPLETE ==========")
+Show("========== IMAGE MODULE COMPLETE ==========")

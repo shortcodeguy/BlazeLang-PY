@@ -1903,8 +1903,9 @@ class ErrorFormatter:
                         # names one; otherwise keep the familiar one-caret
                         # diagnostic. Tabs are preserved for alignment.
                         match = re.search(r"'([^']+)'", error.message)
-                        width = len(match.group(1)) if match else 1
-                        prefix = source_lines[number - 1][:column - 1].replace("\t", "    ")
+                        source_line = source_lines[number - 1]
+                        width = len(match.group(1)) if match and source_line[column - 1:].startswith(match.group(1)) else 1
+                        prefix = source_line[:column - 1].replace("\t", "    ")
                         lines.append(f"  {' ' * gutter} | {prefix}{yellow}{'^' * max(1, width)}{reset}")
 
         if error.note:

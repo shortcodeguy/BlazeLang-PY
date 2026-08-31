@@ -98,7 +98,7 @@ def print_ast(node, indent: int = 0):
         print(f"{prefix}{node_type}")
 
 
-def run_file(filename: str, source: str, verbose: bool = False):
+def run_file(filename: str, source: str, verbose: bool = False, cli_args=None):
     """Execute a BlazeLang file with optional verbose output."""
     try:
         # 1. Lexical Analysis
@@ -125,7 +125,7 @@ def run_file(filename: str, source: str, verbose: bool = False):
             print("Running...")
             print("-" * 50)
 
-        interpreter = Interpreter(filename=filename)
+        interpreter = Interpreter(filename=filename, cli_args=cli_args)
         result = interpreter.interpret(ast)
 
         # Post-execution message only in verbose mode
@@ -253,8 +253,13 @@ def main():
 
         filename = sys.argv[2]
         source = load_source(filename)
-        verbose = is_verbose_mode()
-        run_file(filename, source, verbose)
+        application_args = sys.argv[3:]
+        # Retain the documented standalone verbose switch while allowing a
+        # CLI program to define its own --verbose flag alongside other args.
+        verbose = is_verbose_mode() and application_args in (["--verbose"], ["-v"])
+        if verbose:
+            application_args = []
+        run_file(filename, source, verbose, application_args)
 
     elif command == "tokenize":
         if len(sys.argv) < 3:
