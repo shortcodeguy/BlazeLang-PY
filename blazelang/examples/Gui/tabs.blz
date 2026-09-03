@@ -1,0 +1,34 @@
+// ============================================================
+// BlazeLang GUI 2.0 — Tabs Container Demo
+// ============================================================
+
+Import GUI from "gui"
+
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Tabbed Interface Demo",
+    width: 600,
+    height: 400,
+    centered: true
+})
+
+var tabs = GUI.Tabs()
+
+var tabOverview = tabs.Add("Overview")
+tabOverview.Add(GUI.Text("BlazeLang Language Overview", { size: 18, weight: "bold" }))
+tabOverview.Add(GUI.Text("Fast, clean, high-performance AST interpreter with modern Fluent GUI."))
+
+var tabCode = tabs.Add("Code Editor")
+tabCode.Add(GUI.Text("Script Editor", { size: 14, weight: "bold" }))
+var codeArea = GUI.TextArea({ placeholder: "Write your BlazeLang code here..." })
+codeArea.SetValue("Import GUI from \"gui\"\n\nvar app = GUI.Create(\"Hello\", 400, 300)\napp.Add(GUI.Label(\"Hello World!\"))\napp.Run()")
+tabCode.Add(codeArea)
+
+var tabLogs = tabs.Add("Logs")
+var logArea = GUI.TextArea()
+logArea.SetValue("[INFO] BlazeLang 2.0 GUI initialized\n[INFO] Fluent UI Theme applied (Dark Mode)\n[SUCCESS] All systems operational.")
+tabLogs.Add(logArea)
+
+app.Add(tabs)
+app.Run()

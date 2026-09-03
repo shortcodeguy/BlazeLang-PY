@@ -1,0 +1,63 @@
+// ============================================================
+// BlazeLang GUI 2.0 — Modern User Registration Form
+// ============================================================
+
+Import GUI from "gui"
+
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Account Registration",
+    width: 480,
+    height: 600,
+    centered: true
+})
+
+var card = GUI.Card({ padding: 20 })
+
+var title = GUI.Text("Create Blaze Account", { size: 20, weight: "bold" })
+var subtitle = GUI.Text("Join the BlazeLang developer ecosystem today.")
+
+var lblEmail = GUI.Text("Email Address")
+var inputEmail = GUI.Input({ placeholder: "user@example.com" })
+
+var lblPassword = GUI.Text("Password")
+var inputPassword = GUI.PasswordInput({ placeholder: "At least 8 characters", reveal: true })
+
+var lblCountry = GUI.Text("Country / Region")
+var comboCountry = GUI.ComboBox(["India", "United States", "United Kingdom", "Germany", "Japan"])
+
+var termsCheck = GUI.Checkbox({ text: "I agree to the Terms of Service & Privacy Policy", checked: false })
+
+var statusMsg = GUI.Text("", { size: 11, alignment: "center" })
+
+var submitBtn = GUI.Button({ text: "Create Account", variant: "primary", height: 44, icon: "check" })
+
+submitBtn.OnClick(Function() {
+    var email = inputEmail.GetValue()
+    var pwd = inputPassword.GetValue()
+
+    if email == "" or pwd == "" {
+        statusMsg.SetText("Error: Please fill in all fields!")
+        GUI.Alert("Form Error", "Please fill in email and password!")
+        return null
+    }
+
+    if termsCheck.IsChecked() == false {
+        GUI.Alert("Terms Required", "You must agree to the Terms of Service.")
+        return null
+    }
+
+    GUI.Alert("Registration Successful", "Welcome to BlazeLang, " + email + "!")
+    statusMsg.SetText("Account created successfully for " + email)
+})
+
+card.Add(title, subtitle, GUI.Spacer(12))
+card.Add(lblEmail, inputEmail)
+card.Add(lblPassword, inputPassword)
+card.Add(lblCountry, comboCountry)
+card.Add(termsCheck, GUI.Spacer(12))
+card.Add(submitBtn, statusMsg)
+
+app.Add(card)
+app.Run()

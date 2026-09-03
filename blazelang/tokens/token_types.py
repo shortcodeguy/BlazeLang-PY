@@ -114,6 +114,7 @@ class TokenType(Enum):
 
 class Token:
     """Represents a single token in the source code"""
+    __slots__ = ('type', 'value', 'line', 'column', 'filename')
     
     def __init__(self, token_type: TokenType, value: Any, line: int, column: int, filename: str = "<unknown>"):
         self.type = token_type

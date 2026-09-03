@@ -1,0 +1,45 @@
+// ============================================================
+// BlazeLang GUI 2.0 — Sidebar NavigationView Demo
+// ============================================================
+
+Import GUI from "gui"
+
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Windows 11 Dashboard",
+    width: 800,
+    height: 550,
+    centered: true
+})
+
+var nav = GUI.NavigationView()
+
+// Page 1: Dashboard
+var page1 = GUI.Container()
+page1.Add(GUI.Text("Home Dashboard", { size: 22, weight: "bold" }))
+page1.Add(GUI.Text("Welcome back to BlazeLang 2.0 Desktop Dashboard!"))
+var c1 = GUI.Card()
+c1.Add(GUI.Text("Active Server Connection: Connected", { weight: "bold" }))
+c1.Add(GUI.Text("Latency: 12ms | Memory: 32MB"))
+page1.Add(c1)
+
+// Page 2: Settings
+var page2 = GUI.Container()
+page2.Add(GUI.Text("Settings", { size: 22, weight: "bold" }))
+var t1 = GUI.Toggle({ text: "Auto Updates", checked: true })
+var t2 = GUI.Toggle({ text: "Hardware Acceleration", checked: true })
+page2.Add(t1, t2)
+
+// Page 3: Profile
+var page3 = GUI.Container()
+page3.Add(GUI.Text("User Profile", { size: 22, weight: "bold" }))
+page3.Add(GUI.Input({ value: "Developer", placeholder: "Username" }))
+page3.Add(GUI.Button({ text: "Save Profile", variant: "primary", icon: "save" }))
+
+nav.Add("Dashboard", page1, "home")
+nav.Add("Settings", page2, "settings")
+nav.Add("Profile", page3, "user")
+
+app.Add(nav)
+app.Run()

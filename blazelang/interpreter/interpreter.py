@@ -741,6 +741,16 @@ class BindValue:
         return f"<bind value={self.value!r} state={self.state}>"
 
 
+_VISITOR_MAP = {}
+
+
+def _get_visitor(node_class):
+    method_name = f'visit_{node_class.__name__}'
+    func = getattr(Interpreter, method_name, Interpreter.generic_visit)
+    _VISITOR_MAP[node_class] = func
+    return func
+
+
 class Interpreter:
     """Tree-walking interpreter for BlazeLang"""
 
@@ -821,16 +831,14 @@ class Interpreter:
         if node is None:
             return None
 
-        # Cache resolution per interpreter (rather than on the AST node) so
-        # parsing once and executing that AST with another Interpreter remains
-        # correct. This avoids a string allocation/getattr in tight loops.
-        node_type = type(node)
-        visitor = self._visitor_cache.get(node_type)
-        if visitor is None:
-            visitor = getattr(self, f'visit_{node_type.__name__}', self.generic_visit)
-            self._visitor_cache[node_type] = visitor
+        node_class = node.__class__
         try:
-            return visitor(node)
+            visitor = _VISITOR_MAP[node_class]
+        except KeyError:
+            visitor = _get_visitor(node_class)
+
+        try:
+            return visitor(self, node)
         except BlazeError as error:
             error.attach_context(getattr(node, 'line', None), getattr(node, 'column', None),
                                  getattr(node, 'filename', None) or self.filename, self.call_stack)
@@ -928,9 +936,25 @@ class Interpreter:
 
     def visit_WhileStatement(self, node: WhileStatement) -> Any:
         result = None
-        while self.is_truthy(self.visit(node.condition)):
+        cond = node.condition
+        body = node.body
+        body_stmts = body.statements
+        if len(body_stmts) == 1:
+            target_node = body_stmts[0]
+            if isinstance(target_node, ExpressionStatement):
+                target_node = target_node.expression
+            while bool(self.visit(cond)):
+                try:
+                    result = self.visit(target_node)
+                except BreakException:
+                    break
+                except ContinueException:
+                    continue
+            return result
+
+        while bool(self.visit(cond)):
             try:
-                result = self.visit(node.body)
+                result = self.visit(body)
             except BreakException:
                 break
             except ContinueException:
@@ -950,30 +974,35 @@ class Interpreter:
         if fast_result is not _NO_FAST_PATH:
             return fast_result
 
-        if isinstance(iterable, (list, range)):
+        if isinstance(iterable, (list, range, str)):
             result = None
-            for item in iterable:
-                self.current_scope[node.variable] = {
-                    'value': item,
-                    'constant': False
-                }
-                try:
-                    result = self.visit(node.body)
-                except BreakException:
-                    break
-                except ContinueException:
-                    continue
-            return result
+            cur_scope = self.current_scope
+            var_name = node.variable
+            entry = cur_scope.get(var_name)
+            if entry is None or not isinstance(entry, dict) or entry.get('constant') or isinstance(entry.get('value'), BindValue):
+                entry = {'value': None, 'constant': False}
+                cur_scope[var_name] = entry
 
-        if isinstance(iterable, str):
-            result = None
-            for char in iterable:
-                self.current_scope[node.variable] = {
-                    'value': char,
-                    'constant': False
-                }
+            body = node.body
+            body_stmts = body.statements
+            if len(body_stmts) == 1:
+                target_node = body_stmts[0]
+                if isinstance(target_node, ExpressionStatement):
+                    target_node = target_node.expression
+                for item in iterable:
+                    entry['value'] = item
+                    try:
+                        result = self.visit(target_node)
+                    except BreakException:
+                        break
+                    except ContinueException:
+                        continue
+                return result
+
+            for item in iterable:
+                entry['value'] = item
                 try:
-                    result = self.visit(node.body)
+                    result = self.visit(body)
                 except BreakException:
                     break
                 except ContinueException:
@@ -1376,85 +1405,86 @@ class Interpreter:
         return None
 
     def visit_Identifier(self, node: Identifier) -> Any:
-        # Check for keywords that should be handled as statements
-        if node.name == "continue":
-            raise ContinueException()
-        if node.name == "break":
-            raise BreakException()
+        name = node.name
+        try:
+            return self.current_scope[name]['value']
+        except KeyError:
+            if self.current_scope is not self.global_scope:
+                try:
+                    return self.global_scope[name]['value']
+                except KeyError:
+                    pass
 
-        if node.name in self.current_scope:
-            return self.current_scope[node.name]['value']
+            if name == "continue":
+                raise ContinueException()
+            if name == "break":
+                raise BreakException()
 
-        if node.name in self.global_scope:
-            return self.global_scope[node.name]['value']
-
-        error = BlazeRuntimeError(f"Undefined variable '{node.name}'")
-        known_names = list(self.current_scope) + list(self.global_scope)
-        matches = get_close_matches(node.name, known_names, n=1, cutoff=0.6)
-        if matches:
-            error.hint = f"Did you mean '{matches[0]}'?"
-        raise error
+            error = BlazeRuntimeError(f"Undefined variable '{name}'")
+            known_names = list(self.current_scope) + list(self.global_scope)
+            matches = get_close_matches(name, known_names, n=1, cutoff=0.6)
+            if matches:
+                error.hint = f"Did you mean '{matches[0]}'?"
+            raise error
 
     def visit_Assignment(self, node: Assignment) -> Any:
         value = self.visit(node.value)
+        name = node.name
+        cur_scope = self.current_scope
 
-        target_scope = None
-        if node.name in self.current_scope:
-            target_scope = self.current_scope
-        elif node.name in self.global_scope:
-            target_scope = self.global_scope
-        else:
-            self.current_scope[node.name] = {
-                'value': None,
-                'constant': False
-            }
-            target_scope = self.current_scope
+        try:
+            entry = cur_scope[name]
+        except KeyError:
+            if cur_scope is not self.global_scope:
+                try:
+                    entry = self.global_scope[name]
+                except KeyError:
+                    entry = {'value': None, 'constant': False}
+                    cur_scope[name] = entry
+            else:
+                entry = {'value': None, 'constant': False}
+                cur_scope[name] = entry
 
-        if target_scope[node.name]['constant']:
-            raise ImmutableError(node.name)
+        if entry.get('constant'):
+            raise ImmutableError(name)
 
-        current = target_scope[node.name]['value']
+        current = entry['value']
 
-        # A Bind's own metadata (previous/origin/history/changes/state/
-        # lastUpdate) lives entirely inside its BindValue -- ordinary
-        # assignment syntax still works ('score = 200'), but instead of
-        # replacing the scope entry's value outright, it routes through
-        # BindValue.update() so that metadata stays correct. This is the
-        # only place Bind assignment behavior lives; everything else about
-        # scope/assignment above is unchanged for normal variables.
-        if isinstance(current, BindValue):
-            if node.operator == '=':
+        if type(current) is BindValue:
+            op = node.operator
+            if op == '=':
                 new_value = value
-            elif node.operator == '+=':
+            elif op == '+=':
                 new_value = current.value + value
-            elif node.operator == '-=':
+            elif op == '-=':
                 new_value = current.value - value
-            elif node.operator == '*=':
+            elif op == '*=':
                 new_value = current.value * value
-            elif node.operator == '/=':
+            elif op == '/=':
                 if value == 0:
                     raise BlazeZeroDivisionError()
                 new_value = current.value / value
             else:
                 raise InvalidBindAssignmentError(
-                    node.name, node.operator,
+                    name, op,
                     getattr(node, 'line', None), getattr(node, 'column', None), self.filename,
                 )
             current.update(new_value, self._current_caller_name())
             return current.value
 
-        if node.operator == '=':
-            target_scope[node.name]['value'] = value
-        elif node.operator == '+=':
-            target_scope[node.name]['value'] += value
-        elif node.operator == '-=':
-            target_scope[node.name]['value'] -= value
-        elif node.operator == '*=':
-            target_scope[node.name]['value'] *= value
-        elif node.operator == '/=':
-            target_scope[node.name]['value'] /= value
+        op = node.operator
+        if op == '=':
+            entry['value'] = value
+        elif op == '+=':
+            entry['value'] += value
+        elif op == '-=':
+            entry['value'] -= value
+        elif op == '*=':
+            entry['value'] *= value
+        elif op == '/=':
+            entry['value'] /= value
 
-        return target_scope[node.name]['value']
+        return entry['value']
 
     def visit_PropertyAssignment(self, node) -> Any:
         """Handle property assignment like this.name = value or obj.prop = value"""
@@ -1634,50 +1664,119 @@ class Interpreter:
     def visit_BinaryOperation(self, node: BinaryOperation) -> Any:
         left = self.visit(node.left)
 
-        # Short-circuit evaluation for 'and' / '&&'
-        if node.operator in ('and', '&&'):
-            if not self.is_truthy(left):
+        op = node.operator
+        if op in ('and', '&&'):
+            if not bool(left):
                 return left
             return self.visit(node.right)
 
-        # Short-circuit evaluation for 'or' / '||'
-        if node.operator in ('or', '||'):
-            if self.is_truthy(left):
+        if op in ('or', '||'):
+            if bool(left):
                 return left
             return self.visit(node.right)
 
         right = self.visit(node.right)
 
-        # A bind wraps a value -- it isn't itself an operand for
-        # arithmetic/comparison. Give a clear, Bind-specific error pointing
-        # at '.value' rather than letting Python's TypeError fall through
-        # to a generic "Cannot apply operator..." message.
-        if isinstance(left, BindValue) or isinstance(right, BindValue):
-            bind_name = node.left.name if isinstance(left, BindValue) and isinstance(node.left, Identifier) else (
-                node.right.name if isinstance(right, BindValue) and isinstance(node.right, Identifier) else None
-            )
-            raise UnsupportedBindOperationError(node.operator, bind_name)
+        # Fast numeric path for primitive numbers (int / float)
+        t_left, t_right = type(left), type(right)
+        if (t_left is int or t_left is float) and (t_right is int or t_right is float):
+            if op == '+':
+                return left + right
+            if op == '-':
+                return left - right
+            if op == '*':
+                return left * right
+            if op == '/':
+                if right == 0:
+                    raise BlazeZeroDivisionError()
+                return left / right
+            if op == '%':
+                if right == 0:
+                    raise BlazeZeroDivisionError()
+                return left % right
+            if op == '==':
+                return left == right
+            if op == '!=':
+                return left != right
+            if op == '>':
+                return left > right
+            if op == '<':
+                return left < right
+            if op == '>=':
+                return left >= right
+            if op == '<=':
+                return left <= right
+            if op in ('**', '^'):
+                return left ** right
 
-        # String concatenation
-        if node.operator == '+':
+        if t_left is BindValue or t_right is BindValue:
+            bind_name = node.left.name if t_left is BindValue and isinstance(node.left, Identifier) else (
+                node.right.name if t_right is BindValue and isinstance(node.right, Identifier) else None
+            )
+            raise UnsupportedBindOperationError(op, bind_name)
+
+        if op == '+':
             if isinstance(left, str) or isinstance(right, str):
                 return str(left) + str(right)
             try:
                 return left + right
             except (TypeError, ValueError):
                 raise BlazeTypeError(f"Cannot apply operator '+' to {type(left).__name__} and {type(right).__name__}")
-
-        if node.operator in _BINARY_OPERATORS:
+        elif op == '-':
             try:
-                if node.operator in ('/', '%') and right == 0:
-                    raise BlazeZeroDivisionError()
-                return _BINARY_OPERATORS[node.operator](left, right)
-            except BlazeError:
-                raise
+                return left - right
             except (TypeError, ValueError):
-                raise BlazeTypeError(f"Cannot apply operator '{node.operator}' to {type(left).__name__} and {type(right).__name__}")
+                raise BlazeTypeError(f"Cannot apply operator '-' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '*':
+            try:
+                return left * right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '*' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '/':
+            if right == 0:
+                raise BlazeZeroDivisionError()
+            try:
+                return left / right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '/' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '%':
+            if right == 0:
+                raise BlazeZeroDivisionError()
+            try:
+                return left % right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '%' to {type(left).__name__} and {type(right).__name__}")
+        elif op in ('**', '^'):
+            try:
+                return left ** right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '{op}' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '==':
+            return left == right
+        elif op == '!=':
+            return left != right
+        elif op == '>':
+            try:
+                return left > right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '>' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '<':
+            try:
+                return left < right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '<' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '>=':
+            try:
+                return left >= right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '>=' to {type(left).__name__} and {type(right).__name__}")
+        elif op == '<=':
+            try:
+                return left <= right
+            except (TypeError, ValueError):
+                raise BlazeTypeError(f"Cannot apply operator '<=' to {type(left).__name__} and {type(right).__name__}")
 
-        raise BlazeRuntimeError(f"Unknown operator '{node.operator}'")
+        raise BlazeRuntimeError(f"Unknown operator '{op}'")
 
     def visit_UnaryOperation(self, node: UnaryOperation) -> Any:
         operand = self.visit(node.operand)

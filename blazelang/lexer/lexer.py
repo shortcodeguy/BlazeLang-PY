@@ -116,7 +116,7 @@ class Lexer:
     def read_number(self) -> Token:
         """Read a number literal (integer or float)"""
         start_column = self.column
-        number_str = ''
+        start_pos = self.position
         is_float = False
         
         while self.current_char and (self.current_char.isdigit() or self.current_char == '.'):
@@ -124,9 +124,9 @@ class Lexer:
                 if is_float:
                     break  # Second decimal point - stop
                 is_float = True
-            number_str += self.current_char
             self.advance()
         
+        number_str = self.source[start_pos:self.position]
         if is_float:
             return Token(TokenType.FLOAT, float(number_str), self.line, start_column, self.filename)
         return Token(TokenType.INTEGER, int(number_str), self.line, start_column, self.filename)
@@ -170,11 +170,12 @@ class Lexer:
     def read_identifier(self) -> Token:
         """Read an identifier or keyword"""
         start_column = self.column
-        identifier = ''
+        start_pos = self.position
         
         while self.current_char and (self.current_char.isalnum() or self.current_char == '_'):
-            identifier += self.current_char
             self.advance()
+        
+        identifier = self.source[start_pos:self.position]
         
         # Check if it is a keyword
         token_type = self.keywords.get(identifier, TokenType.IDENTIFIER)

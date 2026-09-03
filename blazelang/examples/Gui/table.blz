@@ -1,0 +1,45 @@
+// ============================================================
+// BlazeLang GUI 2.0 — Modern Data Table & List Demo
+// ============================================================
+
+Import GUI from "gui"
+
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Data Table & List Explorer",
+    width: 700,
+    height: 500,
+    centered: true
+})
+
+var header = GUI.Text("System User Directory", { size: 18, weight: "bold" })
+
+var table = GUI.Table({ columns: ["ID", "Name", "Role", "Status"] })
+
+table.AddRow(["101", "Rohit", "Lead Developer", "Active"])
+table.AddRow(["102", "Alex", "UI/UX Designer", "Active"])
+table.AddRow(["103", "Elena", "Systems Engineer", "Away"])
+table.AddRow(["104", "Marcus", "QA Automation", "Offline"])
+
+var selectedLabel = GUI.Text("Selected User: None")
+
+table.OnSelect(Function(vals) {
+    selectedLabel.SetText("Selected User: " + String(vals[1]) + " (" + String(vals[2]) + ")")
+})
+
+var btnRow = GUI.Row()
+var addBtn = GUI.Button({ text: "Add New User", variant: "primary", icon: "plus" })
+
+addBtn.OnClick(Function() {
+    table.AddRow(["105", "New Member", "Contributor", "Active"])
+})
+
+btnRow.Add(addBtn)
+
+app.Add(header)
+app.Add(table)
+app.Add(selectedLabel)
+app.Add(btnRow)
+
+app.Run()

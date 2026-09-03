@@ -1,0 +1,75 @@
+// ============================================================
+// BlazeLang GUI 2.0 — Modern Controls Demo
+// ============================================================
+
+Import GUI from "gui"
+
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Fluent UI Controls Gallery",
+    width: 650,
+    height: 700,
+    centered: true
+})
+
+var header = GUI.Text("Fluent UI Controls", { size: 20, weight: "bold" })
+
+// Card 1: Buttons & Variants
+var card1 = GUI.Card({ padding: 12 })
+var lbl1 = GUI.Text("Button Variants", { size: 12, weight: "bold" })
+var row1 = GUI.Row()
+row1.Add(GUI.Button({ text: "Primary", variant: "primary", icon: "check" }))
+row1.Add(GUI.Button({ text: "Secondary", variant: "secondary", icon: "settings" }))
+row1.Add(GUI.Button({ text: "Outline", variant: "outline", icon: "edit" }))
+row1.Add(GUI.Button({ text: "Danger", variant: "danger", icon: "trash" }))
+card1.Add(lbl1, row1)
+
+// Card 2: Inputs
+var card2 = GUI.Card({ padding: 12 })
+var lbl2 = GUI.Text("Text & Password Inputs", { size: 12, weight: "bold" })
+var nameInput = GUI.Input({ placeholder: "Enter your full name" })
+var pwdInput = GUI.PasswordInput({ placeholder: "Enter password", reveal: true })
+card2.Add(lbl2, nameInput, pwdInput)
+
+// Card 3: Toggle Switch & Checkbox
+var card3 = GUI.Card({ padding: 12 })
+var lbl3 = GUI.Text("Toggles & Options", { size: 12, weight: "bold" })
+var toggle = GUI.Toggle({ text: "Enable Dark Mode", checked: true })
+var check = GUI.Checkbox({ text: "Remember my credentials", checked: true })
+
+toggle.OnChange(Function(val) {
+    if val { GUI.Theme("dark") } else { GUI.Theme("light") }
+})
+
+card3.Add(lbl3, toggle, check)
+
+// Card 4: Selection Controls
+var card4 = GUI.Card({ padding: 12 })
+var lbl4 = GUI.Text("ComboBox & Radio Buttons", { size: 12, weight: "bold" })
+var combo = GUI.ComboBox({ items: ["Windows 11", "Windows 10", "Linux", "macOS"], value: "Windows 11" })
+var radio1 = GUI.Radio("Option A (Standard)", "group1", "A")
+var radio2 = GUI.Radio("Option B (Fast)", "group1", "B")
+radio1.SetChecked(true)
+card4.Add(lbl4, combo, radio1, radio2)
+
+// Card 5: Slider & Progress Bar
+var card5 = GUI.Card({ padding: 12 })
+var lbl5 = GUI.Text("Slider & Progress Indicator", { size: 12, weight: "bold" })
+var slider = GUI.Slider({ min: 0, max: 100, value: 65 })
+var progress = GUI.ProgressBar(65)
+
+slider.OnChange(Function(val) {
+    progress.SetValue(val)
+})
+
+card5.Add(lbl5, slider, progress)
+
+app.Add(header)
+app.Add(card1)
+app.Add(card2)
+app.Add(card3)
+app.Add(card4)
+app.Add(card5)
+
+app.Run()

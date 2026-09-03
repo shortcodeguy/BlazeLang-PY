@@ -1,0 +1,186 @@
+// ============================================================
+// Modern Windows 11 Calculator — BlazeLang GUI 2.0
+// ============================================================
+
+Import GUI from "gui"
+
+// Enable Dark Mode theme
+GUI.Theme("dark")
+
+var app = GUI.Create({
+    title: "Windows 11 Calculator",
+    width: 360,
+    height: 520,
+    resizable: true,
+    centered: true
+})
+
+// Header & Title
+var titleLabel = GUI.Text("CALCULATOR", { size: 14, weight: "bold", alignment: "left" })
+
+// Display Input
+var display = GUI.Input({
+    value: "0",
+    alignment: "right",
+    fontSize: 28,
+    readonly: true
+})
+
+var status = GUI.Text("Ready", { size: 11, alignment: "right" })
+
+var current = "0"
+var first = 0
+var operation = ""
+var waiting = false
+var hasDecimal = false
+
+Function Refresh() {
+    display.SetValue(current)
+}
+
+Function Clear() {
+    current = "0"
+    first = 0
+    operation = ""
+    waiting = false
+    hasDecimal = false
+    status.SetText("Ready")
+    Refresh()
+}
+
+Function PressDigit(digit) {
+    if waiting {
+        current = String(digit)
+        waiting = false
+        hasDecimal = false
+    } else {
+        if current == "0" {
+            current = String(digit)
+        } else {
+            current = current + String(digit)
+        }
+    }
+    Refresh()
+}
+
+Function Digit0() { PressDigit(0) }
+Function Digit1() { PressDigit(1) }
+Function Digit2() { PressDigit(2) }
+Function Digit3() { PressDigit(3) }
+Function Digit4() { PressDigit(4) }
+Function Digit5() { PressDigit(5) }
+Function Digit6() { PressDigit(6) }
+Function Digit7() { PressDigit(7) }
+Function Digit8() { PressDigit(8) }
+Function Digit9() { PressDigit(9) }
+
+Function Decimal() {
+    if waiting {
+        current = "0."
+        waiting = false
+        hasDecimal = true
+        Refresh()
+        return null
+    }
+    if hasDecimal == false {
+        current = current + "."
+        hasDecimal = true
+    }
+    Refresh()
+}
+
+Function SetOp(op, symbol) {
+    first = Float(current)
+    operation = op
+    waiting = true
+    hasDecimal = false
+    status.SetText(String(first) + " " + symbol)
+}
+
+Function AddOp() { SetOp("+", "+") }
+Function SubOp() { SetOp("-", "−") }
+Function MulOp() { SetOp("*", "×") }
+Function DivOp() { SetOp("/", "÷") }
+
+Function Equals() {
+    var second = Float(current)
+    var result = 0
+
+    if operation == "+" { result = first + second }
+    if operation == "-" { result = first - second }
+    if operation == "*" { result = first * second }
+    if operation == "/" {
+        if second == 0 {
+            current = "Error"
+            status.SetText("Cannot divide by zero")
+            waiting = true
+            operation = ""
+            Refresh()
+            return null
+        }
+        result = first / second
+    }
+
+    current = String(result)
+    status.SetText(String(first) + " " + operation + " " + String(second) + " =")
+    operation = ""
+    waiting = true
+    hasDecimal = false
+    Refresh()
+}
+
+Function Backspace() {
+    if waiting { return null }
+    if len(current) <= 1 {
+        current = "0"
+    } else {
+        var res = ""
+        var i = 0
+        while i < len(current) - 1 {
+            res = res + current[i]
+            i = i + 1
+        }
+        current = res
+    }
+    Refresh()
+}
+
+Function MakeBtn(label, callback, variant) {
+    var b = GUI.Button({ text: label, variant: variant, height: 45 })
+    b.OnClick(callback)
+    return b
+}
+
+// Layout using Modern GUI.Grid
+var grid = GUI.Grid({ columns: 4, rows: 5, spacing: 6 })
+
+grid.Add(MakeBtn("C", Clear, "danger"), 0, 0)
+grid.Add(MakeBtn("⌫", Backspace, "secondary"), 0, 1)
+grid.Add(MakeBtn("%", Clear, "secondary"), 0, 2)
+grid.Add(MakeBtn("÷", DivOp, "primary"), 0, 3)
+
+grid.Add(MakeBtn("7", Digit7, "subtle"), 1, 0)
+grid.Add(MakeBtn("8", Digit8, "subtle"), 1, 1)
+grid.Add(MakeBtn("9", Digit9, "subtle"), 1, 2)
+grid.Add(MakeBtn("×", MulOp, "primary"), 1, 3)
+
+grid.Add(MakeBtn("4", Digit4, "subtle"), 2, 0)
+grid.Add(MakeBtn("5", Digit5, "subtle"), 2, 1)
+grid.Add(MakeBtn("6", Digit6, "subtle"), 2, 2)
+grid.Add(MakeBtn("−", SubOp, "primary"), 2, 3)
+
+grid.Add(MakeBtn("1", Digit1, "subtle"), 3, 0)
+grid.Add(MakeBtn("2", Digit2, "subtle"), 3, 1)
+grid.Add(MakeBtn("3", Digit3, "subtle"), 3, 2)
+grid.Add(MakeBtn("+", AddOp, "primary"), 3, 3)
+
+grid.Add(MakeBtn("0", Digit0, "subtle"), 4, 0, 1, 2)
+grid.Add(MakeBtn(".", Decimal, "subtle"), 4, 2)
+grid.Add(MakeBtn("=", Equals, "success"), 4, 3)
+
+app.Add(titleLabel)
+app.Add(display)
+app.Add(status)
+app.Add(grid)
+
+app.Run()
