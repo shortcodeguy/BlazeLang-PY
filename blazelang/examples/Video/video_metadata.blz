@@ -1,0 +1,14 @@
+Import Video from "video"
+
+Show("========== 5. READING VIDEO METADATA ==========")
+
+var video = Video.Load("sample.mp4")
+
+var w = video.Width()
+var h = video.Height()
+var dur = video.Duration()
+
+Show("Video Metadata Report:")
+Show("Width: " + String(w) + " px")
+Show("Height: " + String(h) + " px")
+Show("Duration: " + String(dur) + " sec")

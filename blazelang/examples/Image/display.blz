@@ -1,0 +1,10 @@
+Import Image from "image"
+Import GUI from "gui"
+
+var app = GUI.Create("BlazeLang Image Display", 400, 300)
+var img = Image.Load("sample.png")
+
+Show("Displaying Local Image in GUI...")
+var img_widget = GUI.Image(img)
+app.Add(img_widget)
+app.Run()

@@ -19,7 +19,7 @@ from blazelang.errors.error_handler import BlazeError, InternalInterpreterError,
 
 def print_banner():
     """Print the BlazeLang banner"""
-    print("BlazeLang v2.0")
+    print("BlazeLang v2.1")
     print("A modern programming language - Readable, Flexible, Structured")
     print()
 
@@ -207,7 +207,7 @@ def main():
         print("  tokenize <file>  Show tokens for a file")
         print("  parse <file>     Show AST for a file")
         print("  package <main>   Create a .blzp package")
-        print("  install <repo>   Install a GitHub package (owner/repo)")
+        print("  install <pkg>    Install a package from registry, file, or GitHub")
         print("  version          Show version information")
         print("  help             Show this help message")
         print()
@@ -217,15 +217,15 @@ def main():
         print()
         print("Examples:")
         print("  blz run examples/hello.blz")
-        print("  blz run examples/hello.blz --verbose")
-        print("  BLZ_DEBUG=1 blz run examples/hello.blz")
+        print("  blz install blz-utils")
+        print("  blz install blz-utils@1.0.0")
         return
 
     command = sys.argv[1]
 
     if command == "version":
         print_banner()
-        print("Version: 2.0")
+        print("Version: 2.1")
         print("Status: production")
 
     elif command == "help":
@@ -237,7 +237,7 @@ def main():
         print("  tokenize <file>  Show tokens for a file")
         print("  parse <file>     Show AST for a file")
         print("  package <main>   Create a .blzp package")
-        print("  install <repo>   Install a GitHub package (owner/repo)")
+        print("  install <pkg>    Install a package from registry, file, or GitHub")
         print("  version          Show version information")
         print("  help             Show this help message")
         print()
@@ -298,12 +298,11 @@ def main():
 
     elif command == "install":
         if len(sys.argv) != 3:
-            print("Error: Usage: blz install githubuser/repo")
+            print("Error: Usage: blz install <package|package@version|file.blzp|user/repo>")
             return
         try:
-            from blazelang.package import install_github_package, PackageError
-            metadata = install_github_package(sys.argv[2])
-            print(f"Installed {metadata['name']}@{metadata.get('version', '0.0.0')}")
+            from blazelang.package import install_package, PackageError
+            install_package(sys.argv[2])
         except PackageError as error:
             print_compiler_error(error)
             sys.exit(1)

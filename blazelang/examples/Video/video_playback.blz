@@ -1,0 +1,25 @@
+Import Video from "video"
+
+Show("========== 6. BASIC VIDEO PLAYBACK ==========")
+
+var video = Video.Load("sample.mp4")
+
+Show("Playing Video...")
+video.Play()
+Show("Is Playing?")
+Show(video.IsPlaying())
+
+Show("Pausing Video...")
+video.Pause()
+Show("Is Playing?")
+Show(video.IsPlaying())
+
+Show("Seeking to 0.5 seconds...")
+video.Seek(0.5)
+Show("Current Position (seconds):")
+Show(video.GetPosition())
+
+Show("Stopping Video...")
+video.Stop()
+Show("Position after Stop:")
+Show(video.GetPosition())

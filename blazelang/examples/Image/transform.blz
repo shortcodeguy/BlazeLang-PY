@@ -1,0 +1,31 @@
+Import Image from "image"
+
+Show("========== 3. IMAGE TRANSFORMS & SAVE ==========")
+
+var img = Image.Load("sample.png")
+
+Show("Original Dimensions:")
+Show(img.Width())
+Show(img.Height())
+
+// Resize
+img.Resize(150, 100)
+Show("Resized Dimensions:")
+Show(img.Width())
+Show(img.Height())
+
+// Rotate and Flip
+img.Rotate(90)
+img.Flip("horizontal")
+img.Flip("vertical")
+
+// Crop
+img.Crop(0, 0, 50, 50)
+Show("Cropped Dimensions:")
+Show(img.Width())
+Show(img.Height())
+
+// Save result in PNG and WebP
+img.Save("transformed.png")
+img.Save("transformed.webp")
+Show("Transformed images saved successfully!")

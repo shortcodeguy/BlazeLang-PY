@@ -1,0 +1,11 @@
+Import Image from "image"
+Import GUI from "gui"
+
+var app = GUI.Create("BlazeLang Image URL Display", 400, 300)
+Show("Downloading Image from URL...")
+var img = Image.LoadURL("https://httpbin.org/image/png")
+
+Show("Displaying Downloaded Image in GUI...")
+var img_widget = GUI.Image(img)
+app.Add(img_widget)
+app.Run()

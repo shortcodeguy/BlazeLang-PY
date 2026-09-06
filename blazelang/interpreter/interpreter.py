@@ -51,6 +51,8 @@ from difflib import get_close_matches
 from builtins import ValueError as PyValueError
 from blazelang.stdlib.tensor import Tensor
 from blazelang.stdlib.persistence import build_localstorage_namespaces
+import blazelang.stdlib.video
+import blazelang.stdlib.image
 
 
 # Module-level tables are created once, not for every binary expression.
@@ -759,18 +761,19 @@ class Interpreter:
     # evaluation from a string that keeps re-evaluating itself.
     MAX_EVAL_DEPTH = 50
 
-    def __init__(self, module_registry=None, loading_modules=None, filename=None, cli_args=None):
+    def __init__(self, module_registry=None, loading_modules=None, filename=None, cli_args=None, package_document=None):
         self.global_scope = {}
         self.current_scope = self.global_scope
         # Tracks which Class's method body is currently executing (None at top level
         # or inside a free function). Used to enforce `private` access control.
         self.current_class = None
-        self.filename = os.path.abspath(filename) if filename else None
+        self.filename = os.path.abspath(filename) if (filename and not filename.startswith("package:")) else filename
         self.module_registry = module_registry if module_registry is not None else {}
         self.loading_modules = loading_modules if loading_modules is not None else []
         self.current_exports = None
         self.call_stack = ["main()"]
         self.cli_args = list(cli_args or [])
+        self.package_document = package_document
         self._eval_depth = 0
         self._visitor_cache = {}
         self._register_builtins()
@@ -2227,10 +2230,14 @@ class Interpreter:
             self._import_convert(node)
         elif module_name == 'tensor':
             self._import_tensor(node)
-        elif module_name == 'image':
+        elif module_name.lower() in ('image', 'image'):
             self._import_image(node)
+        elif module_name.lower() in ('video', 'video'):
+            self._import_video(node)
         elif module_name == 'cli':
             self._import_cli(node)
+        elif module_name == 'process':
+            self._import_process(node)
         else:
             try:
                 exports = self._load_module(module_name)
@@ -2293,14 +2300,88 @@ class Interpreter:
         return candidate.resolve()
 
     def _load_module(self, module_name):
+        from blazelang.package import load_installed_package, _safe_relative
+        from blazelang.lexer.lexer import Lexer
+        from blazelang.parser.parser import Parser
+
+        # 1. Check relative import within a package currently executing
+        if getattr(self, "package_document", None) is not None and (module_name.startswith("./") or module_name.startswith("../")):
+            pkg_meta = self.package_document["metadata"]
+            pkg_name = pkg_meta["name"]
+            current_rel = getattr(self, "package_rel_path", pkg_meta.get("main", "main.blz"))
+            rel_dir = os.path.dirname(current_rel)
+            norm_rel = os.path.normpath(os.path.join(rel_dir, module_name)).replace("\\", "/")
+            if not norm_rel.endswith(".blz"):
+                norm_rel += ".blz"
+            if norm_rel in self.package_document["modules"]:
+                key = f"blzp:{pkg_name}:{norm_rel}"
+                if key in self.module_registry:
+                    return self.module_registry[key]
+                if key in self.loading_modules:
+                    raise CircularImportError(f"Circular import in package {pkg_name}: {norm_rel}")
+                source = self.package_document["modules"][norm_rel]
+                self.loading_modules.append(key)
+                try:
+                    fake_file = f"package:{pkg_name}/{norm_rel}"
+                    program = Parser(Lexer(source, fake_file).tokenize()).parse()
+                    sub_interp = Interpreter(
+                        module_registry=self.module_registry,
+                        loading_modules=self.loading_modules,
+                        filename=fake_file,
+                        package_document=self.package_document
+                    )
+                    sub_interp.package_rel_path = norm_rel
+                    sub_interp.current_exports = {}
+                    sub_interp.interpret(program)
+                    self.module_registry[key] = sub_interp.current_exports
+                    return sub_interp.current_exports
+                finally:
+                    self.loading_modules.pop()
+
+        # 2. Check if module_name resolves to an installed .blzp package or sub-module
+        pkg_doc = load_installed_package(module_name)
+        if pkg_doc is not None:
+            pkg_meta = pkg_doc["metadata"]
+            pkg_name = pkg_meta["name"]
+            modules = pkg_doc["modules"]
+
+            if "/" in module_name or "\\" in module_name:
+                sub_path = module_name.replace("\\", "/").partition("/")[2]
+                if not sub_path.endswith(".blz"):
+                    sub_path += ".blz"
+                target_rel = sub_path
+            else:
+                target_rel = pkg_meta.get("main", "main.blz")
+
+            target_rel = _safe_relative(target_rel)
+            if target_rel in modules:
+                key = f"blzp:{pkg_name}:{target_rel}"
+                if key in self.module_registry:
+                    return self.module_registry[key]
+                if key in self.loading_modules:
+                    raise CircularImportError(f"Circular import in package {pkg_name}: {target_rel}")
+
+                source = modules[target_rel]
+                self.loading_modules.append(key)
+                try:
+                    fake_file = f"package:{pkg_name}/{target_rel}"
+                    program = Parser(Lexer(source, fake_file).tokenize()).parse()
+                    pkg_interp = Interpreter(
+                        module_registry=self.module_registry,
+                        loading_modules=self.loading_modules,
+                        filename=fake_file,
+                        package_document=pkg_doc
+                    )
+                    pkg_interp.package_rel_path = target_rel
+                    pkg_interp.current_exports = {}
+                    pkg_interp.interpret(program)
+                    self.module_registry[key] = pkg_interp.current_exports
+                    return pkg_interp.current_exports
+                finally:
+                    self.loading_modules.pop()
+
+        # 3. Standard disk file-system module loading
         path = self._resolve_module_path(module_name)
-        if not path.is_file():
-            # Installed packages are addressed by their package name and are
-            # materialized lazily into the private package cache on import.
-            from blazelang.package import materialize_installed_module
-            installed = materialize_installed_module(module_name)
-            if installed is not None:
-                path = installed
         key = str(path)
         if key in self.module_registry:
             return self.module_registry[key]
@@ -2318,8 +2399,7 @@ class Interpreter:
                 if matches:
                     error.hint = f"Did you mean '{matches[0]}' in {path.parent}?"
             raise error
-        from blazelang.lexer.lexer import Lexer
-        from blazelang.parser.parser import Parser
+
         self.loading_modules.append(key)
         try:
             program = Parser(Lexer(path.read_text(encoding='utf-8'), str(path)).tokenize()).parse()
@@ -2592,9 +2672,18 @@ class Interpreter:
         base_dir = Path(self.filename).parent if self.filename else Path.cwd()
         self._import_standard_module(node, create_image_module(base_dir), "image")
 
+    def _import_video(self, node):
+        from blazelang.stdlib.video import create_video_module
+        base_dir = Path(self.filename).parent if self.filename else Path.cwd()
+        self._import_standard_module(node, create_video_module(base_dir), "video")
+
     def _import_cli(self, node):
         from blazelang.stdlib.cli import create_cli_module
         self._import_standard_module(node, create_cli_module(self), "cli")
+
+    def _import_process(self, node):
+        from blazelang.stdlib.process import create_process_module
+        self._import_standard_module(node, create_process_module(), "process")
 
     def _import_httpserver(self, node):
         from blazelang.stdlib.httpserver import create_httpserver_module

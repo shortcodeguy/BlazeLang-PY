@@ -1,0 +1,13 @@
+Import Image from "image"
+
+Show("========== 1. LOADING LOCAL IMAGE ==========")
+
+var img = Image.Load("sample.png")
+
+Show("Image Width:")
+Show(img.Width())
+
+Show("Image Height:")
+Show(img.Height())
+
+Show("Local image loaded successfully!")

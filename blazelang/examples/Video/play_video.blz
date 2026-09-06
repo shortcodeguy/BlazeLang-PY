@@ -1,0 +1,14 @@
+Import Video from "video"
+Import GUI from "gui"
+
+var app = GUI.Create("BlazeLang Video Player", 640, 480)
+var video = Video.Load("sample.mp4")
+
+Show("Creating Video GUI Widget...")
+var vid_widget = GUI.Video(video)
+app.Add(vid_widget)
+
+video.Play()
+Show("Video playing state: " + video.IsPlaying())
+
+app.Run()

@@ -1,0 +1,13 @@
+Import Video from "video"
+
+Show("========== 4. LOADING VIDEO ==========")
+
+var video = Video.Load("sample.mp4")
+
+Show("Video loaded successfully!")
+Show("Width:")
+Show(video.Width())
+Show("Height:")
+Show(video.Height())
+Show("Duration (seconds):")
+Show(video.Duration())

@@ -5,8 +5,10 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import shutil
 import struct
 import tempfile
+import urllib.error
 import urllib.request
 import zlib
 from blazelang.errors.error_handler import BlazeError
@@ -14,8 +16,11 @@ from blazelang.errors.error_handler import BlazeError
 MAGIC = b"BLZP\x00"
 VERSION = 1
 HEADER = struct.Struct(">5sHQ32s")  # magic, version, compressed length, SHA-256
+
+REGISTRY_URL = os.environ.get("BLZ_REGISTRY_URL", "https://blazelang.netlify.app/registry")
+
 # A one-file PyInstaller executable unpacks its code into a new temporary
-# directory each run.  Package installs therefore cannot live beside
+# directory each run. Package installs therefore cannot live beside
 # ``__file__``: an install would disappear before the next ``blz run``.
 # LocalAppData is stable, user-writable, and shared by the installed CLI and
 # source checkout. BLZ_PACKAGE_HOME is provided for portable/test installs.
@@ -25,7 +30,7 @@ if _package_home:
 else:
     CACHE = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".blaze"))) / "BlazeLang" / "packages"
 
-# Installed packages are queried for every non-local import.  Keep the small
+# Installed packages are queried for every non-local import. Keep the small
 # index and parsed manifests in memory for the lifetime of the CLI process;
 # cache_package() explicitly refreshes both after an install, so this never
 # returns stale data within a process that changes the package cache.
@@ -138,6 +143,7 @@ def read_package(path: str | Path) -> dict:
 
 def _index_path() -> Path: return CACHE / "index.json"
 
+
 def _index() -> dict:
     global _INDEX_CACHE_PATH, _INDEX_CACHE
     path = _index_path()
@@ -151,57 +157,59 @@ def _index() -> dict:
     return result
 
 
-def _installed_manifest(path: Path) -> dict:
-    """Read an installed manifest once; cache_package invalidates it on update."""
-    manifest_path = path / "package.json"
-    cached = _MANIFEST_CACHE.get(manifest_path)
-    if cached is not None:
-        return cached
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    _MANIFEST_CACHE[manifest_path] = manifest
-    return manifest
-
-
 def cache_package(path: str | Path) -> dict:
     global _INDEX_CACHE_PATH, _INDEX_CACHE
     document = read_package(path)
     meta = document["metadata"]
-    target = CACHE / _safe_name(str(meta["name"])) / str(meta.get("version", "0.0.0"))
-    target.mkdir(parents=True, exist_ok=True)
-    for rel, source in document["modules"].items():
-        destination = target / _safe_relative(rel)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(source, encoding="utf-8", newline="\n")
-    (target / "package.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    index = _index(); index[meta["name"]] = {"version": meta.get("version", "0.0.0"), "path": str(target)}
+    name = _safe_name(str(meta["name"]))
+    version = str(meta.get("version", "0.0.0"))
+    target_dir = CACHE / name / version
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Store ONLY the binary .blzp archive in the package cache directory.
+    # No .blz source files are reconstructed or saved on disk.
+    blzp_target = target_dir / f"{name}.blzp"
+    shutil.copyfile(path, blzp_target)
+
+    index = _index()
+    index[name] = {"version": version, "path": str(blzp_target)}
     CACHE.mkdir(parents=True, exist_ok=True)
     _index_path().write_text(json.dumps(index, indent=2), encoding="utf-8")
     _INDEX_CACHE_PATH, _INDEX_CACHE = _index_path(), index
-    _MANIFEST_CACHE.pop(target / "package.json", None)
     return document
 
 
-def materialize_installed_module(module_name: str) -> Path | None:
-    """Return an installed package's main module, if its name was imported."""
-    # Package imports intentionally only use their package name; relative
-    # module imports within a package continue through the normal resolver.
-    if any(c in module_name for c in "/\\") or module_name.endswith(".blz"):
+def load_installed_package(module_name: str) -> dict | None:
+    """Return an installed package's raw in-memory .blzp document."""
+    pkg_name = module_name.replace("\\", "/").split("/")[0] if any(c in module_name for c in "/\\") else module_name
+    record = _index().get(pkg_name)
+    if not record:
         return None
-    record = _index().get(module_name)
-    if not record: return None
     try:
-        package_path = Path(record["path"])
-        meta = _installed_manifest(package_path)
-        main = package_path / _safe_relative(str(meta["main"]))
-        return main.resolve() if main.is_file() else None
-    except (OSError, KeyError, json.JSONDecodeError, PackageError):
+        blzp_path = Path(record["path"])
+        if blzp_path.is_file():
+            return read_package(blzp_path)
+    except (OSError, PackageError):
         return None
+    return None
+
+
+def materialize_installed_module(module_name: str) -> Path | None:
+    """Return the installed .blzp archive path for an installed module name."""
+    pkg_name = module_name.replace("\\", "/").split("/")[0] if any(c in module_name for c in "/\\") else module_name
+    record = _index().get(pkg_name)
+    if not record:
+        return None
+    blzp_path = Path(record["path"])
+    return blzp_path if blzp_path.is_file() else None
 
 
 def _download_github_package(repo: str) -> Path:
-    if repo.startswith("github:"): repo = repo[7:]
+    if repo.startswith("github:"):
+        repo = repo[7:]
     pieces = repo.strip("/").split("/")
-    if len(pieces) != 2 or not all(pieces): raise PackageError("GitHub package must be githubuser/repo")
+    if len(pieces) != 2 or not all(pieces):
+        raise PackageError("GitHub package must be githubuser/repo")
     owner, project = pieces
     api = f"https://api.github.com/repos/{owner}/{project}"
     try:
@@ -210,8 +218,8 @@ def _download_github_package(repo: str) -> Path:
         tree_url = f"{api}/git/trees/{branch}?recursive=1"
         tree = json.loads(urllib.request.urlopen(tree_url, timeout=30).read().decode("utf-8"))["tree"]
         choices = [item["path"] for item in tree if item.get("type") == "blob" and item.get("path", "").endswith(".blzp")]
-        if not choices: raise PackageError("GitHub repository contains no .blzp package")
-        # Prefer a package matching the repository name, then a root package.
+        if not choices:
+            raise PackageError("GitHub repository contains no .blzp package")
         wanted = project + ".blzp"
         selected = next((x for x in choices if x == wanted), next((x for x in choices if "/" not in x), choices[0]))
         url = f"https://raw.githubusercontent.com/{owner}/{project}/{branch}/{selected}"
@@ -219,14 +227,18 @@ def _download_github_package(repo: str) -> Path:
     except (OSError, KeyError, json.JSONDecodeError) as exc:
         raise PackageError(f"Unable to download GitHub package '{repo}': {exc}") from exc
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=".blzp")
-    try: temp.write(data); return Path(temp.name)
-    finally: temp.close()
+    try:
+        temp.write(data)
+        return Path(temp.name)
+    finally:
+        temp.close()
 
 
 def install_github_package(repo: str, _seen=None) -> dict:
     """Download, validate, cache, then recursively install dependencies."""
     seen = _seen if _seen is not None else set()
-    if repo in seen: return {}
+    if repo in seen:
+        return {}
     seen.add(repo)
     downloaded = _download_github_package(repo)
     try:
@@ -234,5 +246,116 @@ def install_github_package(repo: str, _seen=None) -> dict:
     finally:
         downloaded.unlink(missing_ok=True)
     for dependency in document["metadata"].get("dependencies", {}).values():
-        if isinstance(dependency, str): install_github_package(dependency, seen)
+        if isinstance(dependency, str):
+            install_package(dependency)
     return document["metadata"]
+
+
+def install_package(spec: str) -> dict:
+    """
+    Install a package from the BlazeLang Registry, a local .blzp file path,
+    or a GitHub repository shorthand (user/repo).
+    """
+    spec_path = Path(spec)
+    if spec_path.is_file() or spec.endswith(".blzp"):
+        if not spec_path.is_file():
+            raise PackageError(f"Local package file not found: {spec}")
+        document = cache_package(spec_path)
+        meta = document["metadata"]
+        print(f"Package installed successfully: {meta['name']}@{meta.get('version', '0.0.0')}")
+        return meta
+
+    # Handle requested exact version syntax (e.g. blz-utils@1.0.0)
+    if "@" in spec and "/" not in spec:
+        pkg_name, requested_version = spec.split("@", 1)
+    else:
+        pkg_name, requested_version = spec, None
+
+    if "/" in pkg_name:
+        return install_github_package(spec)
+
+    _safe_name(pkg_name)
+    print(f"Resolving package: {pkg_name}")
+
+    reg_base = os.environ.get("BLZ_REGISTRY_URL", REGISTRY_URL).rstrip("/")
+    pkg_url = f"{reg_base}/packages/{pkg_name}.json"
+
+    req = urllib.request.Request(pkg_url, headers={"User-Agent": "BlazeLang-CLI/2.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw_json = resp.read().decode("utf-8")
+            pkg_meta = json.loads(raw_json)
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            raise PackageError(f"Package '{pkg_name}' not found in registry") from err
+        raise PackageError(f"Registry HTTP error {err.code} while fetching '{pkg_name}'") from err
+    except (urllib.error.URLError, TimeoutError, OSError) as err:
+        raise PackageError(f"Failed to connect to BlazeLang Registry: {err}") from err
+    except json.JSONDecodeError as err:
+        raise PackageError(f"Invalid registry JSON response for '{pkg_name}'") from err
+
+    if not isinstance(pkg_meta, dict) or "versions" not in pkg_meta:
+        raise PackageError(f"Malformed registry metadata for '{pkg_name}'")
+
+    versions = pkg_meta.get("versions", {})
+    if not isinstance(versions, dict) or not versions:
+        raise PackageError(f"No versions available for package '{pkg_name}'")
+
+    if requested_version:
+        if requested_version not in versions:
+            raise PackageError(f"Version '{requested_version}' of package '{pkg_name}' not found in registry")
+        target_version = requested_version
+    else:
+        target_version = pkg_meta.get("latest")
+        if not target_version or target_version not in versions:
+            target_version = sorted(versions.keys())[-1]
+
+    # Check if already installed
+    installed_record = _index().get(pkg_name)
+    if installed_record and installed_record.get("version") == target_version:
+        blzp_p = Path(installed_record["path"])
+        if blzp_p.is_file():
+            print(f"Package already installed: {pkg_name}@{target_version}")
+            print("Skipped.")
+            return read_package(blzp_p)["metadata"]
+
+    if not requested_version:
+        print(f"Latest version: {target_version}")
+
+    version_info = versions[target_version]
+    download_url = version_info.get("download")
+    if not download_url or not isinstance(download_url, str):
+        raise PackageError(f"Missing download URL for {pkg_name}@{target_version}")
+
+    print(f"Downloading {pkg_name}@{target_version}...")
+    try:
+        dl_req = urllib.request.Request(download_url, headers={"User-Agent": "BlazeLang-CLI/2.1.0"})
+        with urllib.request.urlopen(dl_req, timeout=60) as resp:
+            pkg_bytes = resp.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as err:
+        raise PackageError(f"Failed to download package '{pkg_name}@{target_version}': {err}") from err
+
+    print("Verifying package...")
+    expected_sha256 = version_info.get("sha256")
+    if expected_sha256 and isinstance(expected_sha256, str):
+        actual_sha256 = hashlib.sha256(pkg_bytes).hexdigest()
+        if actual_sha256.lower() != expected_sha256.lower():
+            print("Package integrity verification failed.")
+            print("SHA-256 checksum does not match the registry.")
+            print("Installation aborted.")
+            raise PackageError(f"SHA-256 checksum mismatch for {pkg_name}@{target_version}")
+
+    print("Installing...")
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".blzp")
+    try:
+        temp_file.write(pkg_bytes)
+        temp_file.close()
+        doc = cache_package(Path(temp_file.name))
+        print(f"Package installed successfully: {pkg_name}@{target_version}")
+        return doc["metadata"]
+    finally:
+        if os.path.exists(temp_file.name):
+            try:
+                os.unlink(temp_file.name)
+            except OSError:
+                pass

@@ -138,6 +138,7 @@ def _get_gui_icon_path() -> Optional[str]:
         os.path.join(base_dir, "blazelang", "assets", "blaze.ico"),
         os.path.join(os.path.dirname(__file__), "blaze.ico"),
         os.path.join(os.path.dirname(__file__), "assets", "blaze.ico"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "blaze.ico"),
     ]
     seen = set()
     for path in candidates:
@@ -1400,12 +1401,12 @@ class Image(GUIComponent):
 
         if isinstance(src_or_opts, dict) or hasattr(src_or_opts, "properties"):
             opts = _normalize_dict(src_or_opts)
-            self.source = str(opts.get("source", opts.get("src", "")))
+            self.source = opts.get("source", opts.get("src", ""))
             self.req_width = opts.get("width")
             self.req_height = opts.get("height")
             self.stretch = opts.get("stretch", "contain")
         else:
-            self.source = str(src_or_opts)
+            self.source = src_or_opts
 
         self._img_ref = None
 
@@ -1416,24 +1417,51 @@ class Image(GUIComponent):
         return lbl
 
     def _update_image(self, lbl: tk.Label):
-        if not self.source or not os.path.isfile(self.source):
+        if not self.source:
             return
         try:
             from PIL import Image as PILImage, ImageTk
-            pil_img = PILImage.open(self.source)
-            if self.req_width and self.req_height:
-                pil_img = pil_img.resize((int(self.req_width), int(self.req_height)))
-            self._img_ref = ImageTk.PhotoImage(pil_img)
-            lbl.config(image=self._img_ref)
+            pil_img = None
+
+            if hasattr(self.source, "_image"):  # BlazeImage
+                pil_img = self.source._image
+            elif hasattr(self.source, "AddListener") and callable(getattr(self.source, "AddListener", None)):  # BlazeVideo
+                def on_frame(frame):
+                    if not lbl.winfo_exists():
+                        return
+                    try:
+                        if self.req_width and self.req_height:
+                            frame = frame.resize((int(self.req_width), int(self.req_height)))
+                        self._img_ref = ImageTk.PhotoImage(frame)
+                        lbl.config(image=self._img_ref)
+                    except Exception:
+                        pass
+
+                self.source.AddListener(on_frame)
+                if hasattr(self.source, "_bind_widget"):
+                    self.source._bind_widget(lbl)
+                pil_img = self.source.GetFrame()
+            elif isinstance(self.source, str) and os.path.isfile(self.source):
+                pil_img = PILImage.open(self.source)
+
+            if pil_img is not None:
+                if self.req_width and self.req_height:
+                    pil_img = pil_img.resize((int(self.req_width), int(self.req_height)))
+                self._img_ref = ImageTk.PhotoImage(pil_img)
+                lbl.config(image=self._img_ref)
+                return
         except Exception:
+            pass
+
+        if isinstance(self.source, str) and os.path.isfile(self.source):
             try:
                 self._img_ref = tk.PhotoImage(file=self.source)
                 lbl.config(image=self._img_ref)
             except Exception:
                 pass
 
-    def SetSource(self, source: str):
-        self.source = str(source)
+    def SetSource(self, source: Any):
+        self.source = source
         if self._widget is not None:
             self._update_image(self._widget)
         return self
@@ -1447,6 +1475,70 @@ class Image(GUIComponent):
 
     def SetStretch(self, stretch: str):
         self.stretch = stretch
+        return self
+
+
+class VideoWidget(GUIComponent):
+    """Component for displaying and rendering live video streams."""
+    kind = "Video"
+
+    def __init__(self, video_or_opts: Any = ""):
+        super().__init__()
+        self.video = None
+        self.req_width = None
+        self.req_height = None
+
+        if isinstance(video_or_opts, dict) or hasattr(video_or_opts, "properties"):
+            opts = _normalize_dict(video_or_opts)
+            self.video = opts.get("source", opts.get("video", None))
+            self.req_width = opts.get("width")
+            self.req_height = opts.get("height")
+        else:
+            self.video = video_or_opts
+
+        self._img_ref = None
+
+    def _build(self, parent: tk.Widget) -> tk.Widget:
+        palette = _GLOBAL_THEME.get_palette()
+        lbl = tk.Label(parent, bg=palette["surface"], bd=0)
+        self._attach_video(lbl)
+        return lbl
+
+    def _attach_video(self, lbl: tk.Label):
+        if self.video is None:
+            return
+        from PIL import ImageTk
+
+        def on_frame(pil_img):
+            if not lbl.winfo_exists():
+                return
+            try:
+                if self.req_width and self.req_height:
+                    pil_img = pil_img.resize((int(self.req_width), int(self.req_height)))
+                self._img_ref = ImageTk.PhotoImage(pil_img)
+                lbl.config(image=self._img_ref)
+            except Exception:
+                pass
+
+        if hasattr(self.video, "AddListener"):
+            self.video.AddListener(on_frame)
+            if hasattr(self.video, "_bind_widget"):
+                self.video._bind_widget(lbl)
+
+    def SetVideo(self, video: Any):
+        self.video = video
+        if self._widget is not None:
+            self._attach_video(self._widget)
+        return self
+
+    def SetSource(self, source: Any):
+        return self.SetVideo(source)
+
+    def SetSize(self, width: int, height: int):
+        self.req_width = width
+        self.req_height = height
+        if self._widget is not None:
+            self._attach_video(self._widget)
         return self
 
 
@@ -2286,9 +2378,15 @@ class Window:
         icon = self.icon_path or _get_gui_icon_path()
         if icon and os.path.isfile(icon):
             try:
+                self._root.iconbitmap(default=icon)
                 self._root.iconbitmap(icon)
             except Exception:
-                pass
+                try:
+                    from PIL import Image as PILImage, ImageTk
+                    icon_img = ImageTk.PhotoImage(PILImage.open(icon))
+                    self._root.iconphoto(True, icon_img)
+                except Exception:
+                    pass
 
         palette = _GLOBAL_THEME.get_palette()
         _set_window_dark_titlebar(self._root.winfo_id(), palette["mode"] == "dark")
@@ -2377,6 +2475,7 @@ def create_gui_module(interpreter) -> Dict[str, Any]:
         "ProgressBar": lambda val=0: ProgressBar(val),
         "TextArea": lambda p="": TextArea(p),
         "Image": lambda s="": Image(s),
+        "Video": lambda v="": VideoWidget(v),
         "Icon": lambda name="home", size=16: Icon(name, size),
 
         # Containers & Layouts

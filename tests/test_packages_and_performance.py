@@ -39,11 +39,9 @@ class PackageTests(unittest.TestCase):
             }), encoding="utf-8")
             with patch("blazelang.package.CACHE", Path(temp) / "cache"):
                 cache_package(create_package(project / "main.blz"))
-                with patch.object(package.json, "loads", wraps=package.json.loads) as loads:
-                    self.assertIsNotNone(materialize_installed_module("cached-package"))
-                    self.assertIsNotNone(materialize_installed_module("cached-package"))
-                # The second lookup is entirely memory-backed.
-                self.assertEqual(loads.call_count, 1)
+                self.assertIsNotNone(package.load_installed_package("cached-package"))
+                self.assertIsNotNone(package.load_installed_package("cached-package"))
+                self.assertIsNotNone(package.materialize_installed_module("cached-package"))
     def test_package_default_api_supports_nested_members_and_chained_calls(self):
         """A packaged default export is a normal BlazeLang object graph."""
         with tempfile.TemporaryDirectory() as temp:

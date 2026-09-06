@@ -1,0 +1,15 @@
+Import Image from "image"
+
+Show("========== 2. LOADING IMAGE FROM URL ==========")
+
+// Download image from public URL
+var img = Image.LoadURL("https://httpbin.org/image/png")
+
+Show("Downloaded Image Width:")
+Show(img.Width())
+
+Show("Downloaded Image Height:")
+Show(img.Height())
+
+img.Save("downloaded_httpbin.png")
+Show("Saved downloaded image to downloaded_httpbin.png!")

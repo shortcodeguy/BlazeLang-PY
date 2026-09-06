@@ -1,6 +1,32 @@
 """Native Pillow-backed image support for BlazeLang's ``image`` module."""
 
+import io
+import os
+import sys
 from pathlib import Path
+import urllib.request
+from typing import Any, Dict, Optional
+
+
+def _get_blaze_icon_path() -> Optional[str]:
+    """Locate blaze.ico relative to project root or PyInstaller frozen bundle."""
+    if getattr(sys, "frozen", False):
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    else:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    candidates = [
+        os.path.join(base_dir, "blaze.ico"),
+        os.path.join(base_dir, "assets", "blaze.ico"),
+        os.path.join(base_dir, "blazelang", "assets", "blaze.ico"),
+        os.path.join(os.path.dirname(__file__), "blaze.ico"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "blaze.ico"),
+    ]
+    for path in candidates:
+        abs_p = os.path.abspath(path)
+        if os.path.isfile(abs_p):
+            return abs_p
+    return None
 
 try:
     from PIL import Image as PillowImage
@@ -11,7 +37,7 @@ except ImportError as error:  # pragma: no cover - exercised when packaging inco
 from blazelang.errors.error_handler import RuntimeError as BlazeRuntimeError
 
 
-_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".bmp": "BMP"}
+_FORMATS = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".bmp": "BMP", ".webp": "WEBP"}
 _MAX_PIXELS = 100_000_000
 
 
@@ -70,6 +96,12 @@ class BlazeImage:
     def height(self):
         return self._image.height
 
+    def Width(self) -> int:
+        return self._image.width
+
+    def Height(self) -> int:
+        return self._image.height
+
     def _point(self, x, y):
         x, y = _integer(x, "x"), _integer(y, "y")
         if not (0 <= x < self.width and 0 <= y < self.height):
@@ -107,6 +139,17 @@ class BlazeImage:
     def FlipVertical(self):
         self._image = ImageOps.flip(self._image)
         return self
+
+    def Flip(self, direction):
+        if not isinstance(direction, str):
+            raise BlazeRuntimeError("Image.Flip direction must be 'horizontal' or 'vertical'")
+        d = direction.strip().lower()
+        if d == "horizontal":
+            return self.FlipHorizontal()
+        elif d == "vertical":
+            return self.FlipVertical()
+        else:
+            raise BlazeRuntimeError("Image.Flip direction must be 'horizontal' or 'vertical'")
 
     def Grayscale(self):
         alpha = self._image.getchannel("A")
@@ -186,7 +229,7 @@ class BlazeImage:
         path = self._resolve(path, "Save path")
         image_format = _FORMATS.get(path.suffix.lower())
         if not image_format:
-            raise BlazeRuntimeError("Image.Save supports PNG, JPG, JPEG, and BMP files")
+            raise BlazeRuntimeError("Image.Save supports PNG, JPG, JPEG, BMP, and WebP files")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             image = self._image.convert("RGB") if image_format == "JPEG" else self._image
@@ -194,6 +237,44 @@ class BlazeImage:
         except (OSError, ValueError) as error:
             raise BlazeRuntimeError(f"Image.Save failed: {error}")
         return True
+
+    def Show(self, title: str = "BlazeLang Image"):
+        return self.Display(title)
+
+    def Display(self, title: str = "BlazeLang Image"):
+        import tkinter as tk
+        from PIL import ImageTk
+
+        root = tk.Tk()
+        root.title(str(title))
+        root.geometry(f"{self.width}x{self.height}")
+
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ShortCodeGuy.BlazeLang.GUI")
+            except Exception:
+                pass
+
+        icon_path = _get_blaze_icon_path()
+        if icon_path and os.path.isfile(icon_path):
+            try:
+                root.iconbitmap(default=icon_path)
+                root.iconbitmap(icon_path)
+            except Exception:
+                try:
+                    icon_img = ImageTk.PhotoImage(self._image)
+                    root.iconphoto(True, icon_img)
+                except Exception:
+                    pass
+
+        tk_img = ImageTk.PhotoImage(self._image)
+        lbl = tk.Label(root, image=tk_img, bd=0)
+        lbl._tk_img = tk_img
+        lbl.pack(fill="both", expand=True)
+
+        root.mainloop()
+        return self
 
     def _resolve(self, path, name):
         if not isinstance(path, str) or not path:
@@ -210,7 +291,15 @@ class ImageLibrary:
         if not isinstance(path, str) or not path:
             raise BlazeRuntimeError(f"Image.{name} path must be a non-empty string")
         target = Path(path)
-        return target if target.is_absolute() else self.base_dir / target
+        if target.is_absolute():
+            return target
+        resolved = self.base_dir / target
+        if resolved.exists():
+            return resolved
+        cwd_resolved = Path.cwd() / target
+        if cwd_resolved.exists():
+            return cwd_resolved
+        return resolved
 
     def Create(self, width, height):
         width, height = _integer(width, "Create width"), _integer(height, "Create height")
@@ -223,7 +312,7 @@ class ImageLibrary:
     def Open(self, path):
         target = self._path(path, "Open")
         if target.suffix.lower() not in _FORMATS:
-            raise BlazeRuntimeError("Image.Open supports PNG, JPG, JPEG, and BMP files")
+            raise BlazeRuntimeError("Image.Open supports PNG, JPG, JPEG, BMP, and WebP files")
         try:
             with PillowImage.open(target) as image:
                 image.load()
@@ -233,7 +322,43 @@ class ImageLibrary:
         except (OSError, ValueError) as error:
             raise BlazeRuntimeError(f"Image.Open failed: {error}")
 
+    def Load(self, path):
+        return self.Open(path)
+
+    def LoadURL(self, url):
+        if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
+            raise BlazeRuntimeError("Image.LoadURL requires a valid 'http://' or 'https://' URL string")
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "BlazeLang/2.0"})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = response.read()
+            with PillowImage.open(io.BytesIO(data)) as image:
+                image.load()
+                return BlazeImage(image.copy(), self.base_dir)
+        except BlazeRuntimeError:
+            raise
+        except Exception as error:
+            raise BlazeRuntimeError(f"Image.LoadURL failed to fetch or parse image from '{url}': {error}")
+
+
+    def Show(self, image, title="BlazeLang Image"):
+        if hasattr(image, "Show"):
+            return image.Show(title)
+        raise BlazeRuntimeError("Image.Show expects an Image object")
+
+    def Display(self, image, title="BlazeLang Image"):
+        if hasattr(image, "Display"):
+            return image.Display(title)
+        raise BlazeRuntimeError("Image.Display expects an Image object")
+
 
 def create_image_module(base_dir=None):
     library = ImageLibrary(base_dir)
-    return {"Open": library.Open, "Create": library.Create}
+    return {
+        "Open": library.Open,
+        "Load": library.Load,
+        "LoadURL": library.LoadURL,
+        "Create": library.Create,
+        "Show": library.Show,
+        "Display": library.Display,
+    }

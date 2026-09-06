@@ -1,0 +1,19 @@
+Import Process from "process"
+
+Show("=== BlazeLang Process Module Demo ===")
+
+// 1. Synchronous execution with Process.Run
+Show("--- Running command synchronously ---")
+var runResult = Process.Run("cmd", ["/c", "echo", "Hello from Process.Run!"])
+Show("Stdout: " + runResult.stdout)
+Show("Exit Code: " + runResult.exit_code)
+
+// 2. Asynchronous execution with Process.Start and Process.Wait
+Show("--- Starting background process ---")
+var proc = Process.Start("cmd", ["/c", "echo", "Hello from Process.Start!"])
+Show("Process PID: " + Process.PID(proc))
+Show("Is Running: " + Process.IsRunning(proc))
+
+var exitCode = Process.Wait(proc)
+Show("Process Finished with Exit Code: " + exitCode)
+Show("Is Still Running: " + Process.IsRunning(proc))

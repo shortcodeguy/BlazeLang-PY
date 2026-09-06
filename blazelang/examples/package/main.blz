@@ -4,7 +4,7 @@
 //   blz package main.blz
 //
 // Publish hello-package.blzp to GitHub, then install it with:
-//   blz install githubuser/repo
+//   blz install <package-name>   ~ must be registered on blazelang official site 
 //
 // Consumer example:
 //   import greet from "hello-package"
