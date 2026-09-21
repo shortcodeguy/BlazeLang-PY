@@ -90,15 +90,31 @@ class Lexer:
     
     def skip_whitespace(self):
         """Skip whitespace characters (spaces, tabs, carriage returns)"""
-        while self.current_char and self.current_char in ' \t\r':
-            self.advance()
-    
+        src = self.source
+        pos = self.position
+        length = len(src)
+        while pos < length and src[pos] in ' \t\r':
+            pos += 1
+        self.column += (pos - self.position)
+        self.position = pos
+        self.current_char = src[pos] if pos < length else None
+
     def skip_comment(self):
         """Skip single-line and multi-line comments"""
         if self.current_char == '/' and self.peek() == '/':
             # Single line comment
-            while self.current_char and self.current_char != '\n':
-                self.advance()
+            src = self.source
+            pos = self.position
+            length = len(src)
+            nl_pos = src.find('\n', pos)
+            if nl_pos == -1:
+                self.position = length
+                self.current_char = None
+                self.column += (length - pos)
+            else:
+                self.column += (nl_pos - pos)
+                self.position = nl_pos
+                self.current_char = '\n'
         elif self.current_char == '/' and self.peek() == '*':
             # Multi-line comment
             self.advance()  # Skip /
@@ -112,31 +128,43 @@ class Lexer:
                     self.line += 1
                     self.column = 1
                 self.advance()
-    
+
     def read_number(self) -> Token:
         """Read a number literal (integer or float)"""
         start_column = self.column
         start_pos = self.position
+        src = self.source
+        pos = self.position
+        length = len(src)
         is_float = False
-        
-        while self.current_char and (self.current_char.isdigit() or self.current_char == '.'):
-            if self.current_char == '.':
+
+        while pos < length:
+            c = src[pos]
+            if c.isdigit():
+                pos += 1
+            elif c == '.':
                 if is_float:
-                    break  # Second decimal point - stop
+                    break
                 is_float = True
-            self.advance()
-        
-        number_str = self.source[start_pos:self.position]
+                pos += 1
+            else:
+                break
+
+        self.column += (pos - start_pos)
+        self.position = pos
+        self.current_char = src[pos] if pos < length else None
+
+        number_str = src[start_pos:pos]
         if is_float:
             return Token(TokenType.FLOAT, float(number_str), self.line, start_column, self.filename)
         return Token(TokenType.INTEGER, int(number_str), self.line, start_column, self.filename)
-    
+
     def read_string(self) -> Token:
         """Read a string literal"""
         start_column = self.column
         quote_char = self.current_char  # " or '
         self.advance()  # Skip opening quote
-        
+
         string_value = ''
         while self.current_char and self.current_char != quote_char:
             if self.current_char == '\\':
@@ -157,29 +185,40 @@ class Lexer:
             else:
                 string_value += self.current_char
             self.advance()
-        
+
         if self.current_char != quote_char:
             raise LexerError(
                 f"Unterminated string literal",
                 self.line, start_column, self.filename
             )
-        
+
         self.advance()  # Skip closing quote
         return Token(TokenType.STRING, string_value, self.line, start_column, self.filename)
-    
+
     def read_identifier(self) -> Token:
         """Read an identifier or keyword"""
         start_column = self.column
         start_pos = self.position
-        
-        while self.current_char and (self.current_char.isalnum() or self.current_char == '_'):
-            self.advance()
-        
-        identifier = self.source[start_pos:self.position]
-        
+        src = self.source
+        pos = self.position
+        length = len(src)
+
+        while pos < length:
+            c = src[pos]
+            if c.isalnum() or c == '_':
+                pos += 1
+            else:
+                break
+
+        self.column += (pos - start_pos)
+        self.position = pos
+        self.current_char = src[pos] if pos < length else None
+
+        identifier = src[start_pos:pos]
+
         # Check if it is a keyword
         token_type = self.keywords.get(identifier, TokenType.IDENTIFIER)
-        
+
         # Set appropriate value based on token type
         if token_type == TokenType.BOOLEAN:
             value = (identifier == 'true')
@@ -187,7 +226,7 @@ class Lexer:
             value = None
         else:
             value = identifier
-        
+
         return Token(token_type, value, self.line, start_column, self.filename)
     
     def get_next_token(self) -> Token:

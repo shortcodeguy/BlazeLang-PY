@@ -51,8 +51,6 @@ from difflib import get_close_matches
 from builtins import ValueError as PyValueError
 from blazelang.stdlib.tensor import Tensor
 from blazelang.stdlib.persistence import build_localstorage_namespaces
-import blazelang.stdlib.video
-import blazelang.stdlib.image
 
 
 # Module-level tables are created once, not for every binary expression.
@@ -170,6 +168,9 @@ class Function(AttributeHolder):
         # means any other code path that builds a meta Function directly (e.g.
         # ConstructorDeclaration handling) can't accidentally end up private.
         self.access_modifier = 'public' if is_meta else access_modifier  # 'public' or 'private'
+        self._is_simple = (not is_meta and not is_async and owner_class is None)
+        self._param_count = len(parameters)
+        self._stack_name = f"{name}()"
 
     def __call__(self, interpreter, arguments: List[Any], instance_scope: Dict = None) -> Any:
         """Execute the function"""
@@ -179,32 +180,48 @@ class Function(AttributeHolder):
         # New scope inherits from closure
         new_scope = dict(self.closure)
 
+        # Fast path for standalone simple functions (no class owner, not meta, not async)
+        if self._is_simple and not instance_scope:
+            interpreter.current_scope = new_scope
+            interpreter.current_class = None
+
+            # Bind parameters directly
+            p_len = self._param_count
+            a_len = len(arguments)
+            for i in range(p_len):
+                param = self.parameters[i]
+                new_scope[param] = {
+                    'value': arguments[i] if i < a_len else None,
+                    'constant': False
+                }
+
+            interpreter.call_stack.append(self._stack_name)
+            try:
+                try:
+                    return interpreter.visit(self.body)
+                except ReturnException as ret:
+                    return ret.value
+            finally:
+                interpreter.call_stack.pop()
+                interpreter.current_scope = previous_scope
+                interpreter.current_class = previous_class
+
         # If instance_scope is provided (for methods), merge it
         if instance_scope:
             new_scope.update(instance_scope)
 
         interpreter.current_scope = new_scope
-        # While this method body runs, the interpreter is "inside" its owner class,
-        # which is what lets private members be called from other methods of the
-        # same class (e.g. this.InternalInfo()) while still blocking outside access.
-        # This applies identically whether the function is a regular method or a
-        # meta function (constructor) -- both run through this same __call__, so
-        # current_class is set the same way for either, and private/static access
-        # checks behave consistently in both cases.
         interpreter.current_class = self.owner_class
 
         # Bind parameters
-        for i, param in enumerate(self.parameters):
-            if i < len(arguments):
-                new_scope[param] = {
-                    'value': arguments[i],
-                    'constant': False
-                }
-            else:
-                new_scope[param] = {
-                    'value': None,
-                    'constant': False
-                }
+        p_len = self._param_count
+        a_len = len(arguments)
+        for i in range(p_len):
+            param = self.parameters[i]
+            new_scope[param] = {
+                'value': arguments[i] if i < a_len else None,
+                'constant': False
+            }
 
         # Lifecycle hooks apply to normal instance methods only.  Meta hooks
         # themselves and legacy Meta methods never re-enter this path.
@@ -217,12 +234,9 @@ class Function(AttributeHolder):
             if hook:
                 return hook(interpreter, hook_arguments, instance_scope)
 
-        # A string that also carries this method's custom attributes, so a
-        # Meta hook can do `method.hasAttribute("role")` while everything
-        # that just treats it as the method's name keeps working.
         method_token = MethodName(self.name, self.attributes) if hooks else self.name
 
-        interpreter.call_stack.append(f"{self.name}()")
+        interpreter.call_stack.append(self._stack_name)
         try:
             if hooks:
                 run_hook('OnCall', [method_token, arguments])
@@ -236,18 +250,12 @@ class Function(AttributeHolder):
             except Exception as error:
                 if hooks:
                     run_hook('OnError', [method_token, str(error)])
-                # An async function's body failing doesn't raise out of the
-                # call itself -- like a rejected Promise, the error is
-                # captured on the Future and only surfaces when something
-                # 'await's it (see visit_AwaitExpression).
                 if self.is_async:
                     return BlazeFuture(error=error)
                 raise
             if hooks:
                 run_hook('OnReturn', [method_token, result])
                 run_hook('After', [method_token, result])
-            # Legacy Meta functions are statement-like unless they explicitly
-            # return a value (HTTP handlers rely on that established form).
             if self.is_meta and not returned_explicitly:
                 return None
             if self.is_async:
@@ -506,12 +514,20 @@ class StructType:
         `User(name: "A", name: "B")`) is still caught as a duplicate, not
         silently collapsed by the last value winning.
         """
-        if len(positional_args) > len(self.fields):
+        p_len = len(positional_args)
+        f_len = len(self.fields)
+        if p_len > f_len:
             raise StructConstructionError(
-                f"Struct '{self.name}' takes at most {len(self.fields)} positional "
-                f"argument(s), but received {len(positional_args)}",
+                f"Struct '{self.name}' takes at most {f_len} positional "
+                f"argument(s), but received {p_len}",
                 line, column, filename,
             )
+
+        # Fast path: exclusively positional arguments with all fields provided
+        if not named_args and p_len == f_len:
+            instance = StructInstance(self)
+            instance.properties = dict(zip(self.fields, positional_args))
+            return instance
 
         values: Dict[str, Any] = {}
         assigned_by: Dict[str, str] = {}
@@ -942,7 +958,9 @@ class Interpreter:
         cond = node.condition
         body = node.body
         body_stmts = body.statements
-        if len(body_stmts) == 1:
+        n_stmts = len(body_stmts)
+
+        if n_stmts == 1:
             target_node = body_stmts[0]
             if isinstance(target_node, ExpressionStatement):
                 target_node = target_node.expression
@@ -955,9 +973,15 @@ class Interpreter:
                     continue
             return result
 
+        # Flatten any ExpressionStatements in multi-statement body for faster iteration
+        unwrapped = [
+            stmt.expression if isinstance(stmt, ExpressionStatement) else stmt
+            for stmt in body_stmts
+        ]
         while bool(self.visit(cond)):
             try:
-                result = self.visit(body)
+                for stmt in unwrapped:
+                    result = self.visit(stmt)
             except BreakException:
                 break
             except ContinueException:
@@ -1002,10 +1026,15 @@ class Interpreter:
                         continue
                 return result
 
+            unwrapped = [
+                stmt.expression if isinstance(stmt, ExpressionStatement) else stmt
+                for stmt in body_stmts
+            ]
             for item in iterable:
                 entry['value'] = item
                 try:
-                    result = self.visit(body)
+                    for stmt in unwrapped:
+                        result = self.visit(stmt)
                 except BreakException:
                     break
                 except ContinueException:
@@ -1409,39 +1438,35 @@ class Interpreter:
 
     def visit_Identifier(self, node: Identifier) -> Any:
         name = node.name
-        try:
-            return self.current_scope[name]['value']
-        except KeyError:
-            if self.current_scope is not self.global_scope:
-                try:
-                    return self.global_scope[name]['value']
-                except KeyError:
-                    pass
+        cur = self.current_scope
+        if name in cur:
+            return cur[name]['value']
+        glob = self.global_scope
+        if cur is not glob and name in glob:
+            return glob[name]['value']
 
-            if name == "continue":
-                raise ContinueException()
-            if name == "break":
-                raise BreakException()
+        if name == "continue":
+            raise ContinueException()
+        if name == "break":
+            raise BreakException()
 
-            error = BlazeRuntimeError(f"Undefined variable '{name}'")
-            known_names = list(self.current_scope) + list(self.global_scope)
-            matches = get_close_matches(name, known_names, n=1, cutoff=0.6)
-            if matches:
-                error.hint = f"Did you mean '{matches[0]}'?"
-            raise error
+        error = BlazeRuntimeError(f"Undefined variable '{name}'")
+        known_names = list(cur) + list(glob)
+        matches = get_close_matches(name, known_names, n=1, cutoff=0.6)
+        if matches:
+            error.hint = f"Did you mean '{matches[0]}'?"
+        raise error
 
     def visit_Assignment(self, node: Assignment) -> Any:
         value = self.visit(node.value)
         name = node.name
         cur_scope = self.current_scope
 
-        try:
-            entry = cur_scope[name]
-        except KeyError:
+        entry = cur_scope.get(name)
+        if entry is None:
             if cur_scope is not self.global_scope:
-                try:
-                    entry = self.global_scope[name]
-                except KeyError:
+                entry = self.global_scope.get(name)
+                if entry is None:
                     entry = {'value': None, 'constant': False}
                     cur_scope[name] = entry
             else:
@@ -1451,10 +1476,10 @@ class Interpreter:
         if entry.get('constant'):
             raise ImmutableError(name)
 
+        op = node.operator
         current = entry['value']
 
         if type(current) is BindValue:
-            op = node.operator
             if op == '=':
                 new_value = value
             elif op == '+=':
@@ -1475,7 +1500,6 @@ class Interpreter:
             current.update(new_value, self._current_caller_name())
             return current.value
 
-        op = node.operator
         if op == '=':
             entry['value'] = value
         elif op == '+=':

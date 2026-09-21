@@ -2,7 +2,7 @@
   "name": "blazelang",
   "displayName": "BlazeLang",
   "description": "First-class language support for BlazeLang (.blz) files.",
-  "version": "1.4.0",
+  "version": "2.3.0",
   "publisher": "ShortCodeGuyStudio",
   "license": "MIT",
   "repository": {
@@ -29,6 +29,7 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
+    "onLanguage:blazelang",
     "workspaceContains:**/*.blz"
   ],
   "contributes": {
@@ -62,15 +63,30 @@
         "path": "./snippets/blazelang.code-snippets"
       }
     ],
+    "configurationDefaults": {
+      "[blazelang]": {
+        "editor.quickSuggestions": {
+          "other": "on",
+          "comments": "off",
+          "strings": "off"
+        },
+        "editor.suggest.showKeywords": true,
+        "editor.suggest.showSnippets": true,
+        "editor.suggest.snippetsPreventQuickSuggestions": false,
+        "editor.tabCompletion": "on",
+        "editor.wordBasedSuggestions": "matchingDocuments",
+        "editor.snippetSuggestions": "top"
+      }
+    },
     "commands": [
       {
-        "command": "blazelang.runFile",
-        "title": "BlazeLang: Run File",
+        "command": "blazelang.runCurrentFile",
+        "title": "Run BlazeLang File",
         "icon": "$(play)"
       },
       {
-        "command": "blazelang.runCurrentFile",
-        "title": "BlazeLang: Run Current File",
+        "command": "blazelang.runFile",
+        "title": "BlazeLang: Run File",
         "icon": "$(play)"
       },
       {
@@ -112,15 +128,10 @@
     "configuration": {
       "title": "BlazeLang",
       "properties": {
-        "blazelang.interpreterPath": {
-          "type": "string",
-          "default": "",
-          "description": "Deprecated: use blazelang.cliPath instead. Path to blz.exe, blzinterpreter.exe, or a compatible BlazeLang command."
-        },
         "blazelang.cliPath": {
           "type": "string",
           "default": "blz",
-          "description": "Path to the BlazeLang CLI executable used to run files. Falls back to blazelang.interpreterPath, then 'blz' on PATH."
+          "description": "Path to the BlazeLang CLI executable (blz.exe). Defaults to 'blz' on PATH."
         },
         "blazelang.enableDiagnostics": {
           "type": "boolean",
@@ -130,7 +141,7 @@
         "blazelang.enableCompletion": {
           "type": "boolean",
           "default": true,
-          "description": "Enable BlazeLang autocomplete suggestions."
+          "description": "Enable BlazeLang autocomplete suggestions & IntelliSense."
         },
         "blazelang.enableFormatting": {
           "type": "boolean",
@@ -151,19 +162,8 @@
         }
       }
     },
-    "submenus": [
-      {
-        "id": "blazelang.runMenu",
-        "label": "Run BlazeLang",
-        "icon": "$(play)"
-      }
-    ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "blazelang.runFile",
-          "when": "resourceLangId == blazelang"
-        },
         {
           "command": "blazelang.runCurrentFile",
           "when": "resourceLangId == blazelang"
@@ -193,27 +193,9 @@
       ],
       "editor/title": [
         {
-          "submenu": "blazelang.runMenu",
+          "command": "blazelang.runCurrentFile",
           "when": "resourceLangId == blazelang",
-          "group": "navigation@1"
-        }
-      ],
-      "blazelang.runMenu": [
-        {
-          "command": "blazelang.runFile",
-          "group": "1_run@1"
-        },
-        {
-          "command": "blazelang.runFileWithArgs",
-          "group": "1_run@2"
-        },
-        {
-          "command": "blazelang.runProject",
-          "group": "1_run@3"
-        },
-        {
-          "command": "blazelang.stop",
-          "group": "2_stop@1"
+          "group": "navigation"
         }
       ]
     },

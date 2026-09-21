@@ -83,6 +83,7 @@ function activate(context) {
     context.subscriptions.push(
         vscode.languages.registerCompletionItemProvider(selector, wrapCompletion((0, providers_1.completionProvider)(service), completionEnabled), '.', '"', "'", '@'),
         vscode.languages.registerHoverProvider(selector, (0, providers_1.hoverProvider)(service)),
+        vscode.languages.registerSignatureHelpProvider(selector, (0, providers_1.signatureHelpProvider)(service), '(', ','),
         vscode.languages.registerDocumentSymbolProvider(selector, (0, providers_1.symbolProvider)(service)),
         vscode.languages.registerWorkspaceSymbolProvider((0, providers_1.symbolProvider)(service)),
         vscode.languages.registerDefinitionProvider(selector, (0, providers_1.definitionProvider)(service)),

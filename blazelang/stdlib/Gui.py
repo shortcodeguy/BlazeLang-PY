@@ -1,6 +1,6 @@
 """
 BlazeLang GUI 2.0 Module
-Modern Windows 11 / Fluent Desktop UI Framework for BlazeLang.
+Modern Windows 11 / Fluent Desktop UI Framework for BlazeLang powered by PySide6 / Qt.
 
 Import:
     Import GUI from "gui"
@@ -9,10 +9,53 @@ Import:
 import os
 import sys
 import ctypes
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from PySide6.QtCore import Qt, QEvent, QObject, QSize
+from PySide6.QtGui import (
+    QIcon,
+    QPixmap,
+    QImage,
+    QFont,
+    QColor,
+    QAction,
+    QPainter,
+    QBrush,
+    QPen,
+)
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QCheckBox,
+    QRadioButton,
+    QButtonGroup,
+    QComboBox,
+    QSlider,
+    QProgressBar,
+    QTextEdit,
+    QScrollArea,
+    QSplitter,
+    QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QListWidget,
+    QListWidgetItem,
+    QMenuBar,
+    QMenu,
+    QToolBar,
+    QMessageBox,
+    QFileDialog,
+    QFrame,
+    QSizePolicy,
+)
 
 from blazelang.errors.error_handler import (
     RuntimeError as BlazeRuntimeError,
@@ -152,6 +195,31 @@ def _get_gui_icon_path() -> Optional[str]:
 
 
 # ============================================================
+# Qt Application Lifecycle Singleton Manager
+# ============================================================
+
+_QT_APP_INSTANCE: Optional[QApplication] = None
+
+
+def _get_or_create_qapp() -> QApplication:
+    """Safely obtain or initialize the Qt Application instance."""
+    global _QT_APP_INSTANCE
+    existing = QApplication.instance()
+    if existing is not None:
+        _QT_APP_INSTANCE = existing
+        return existing
+
+    _set_windows_dpi_awareness()
+    _set_windows_app_identity()
+
+    app = QApplication(sys.argv if sys.argv else ["BlazeLang"])
+    app.setApplicationName("BlazeLang GUI")
+    app.setOrganizationName("BlazeLang")
+    _QT_APP_INSTANCE = app
+    return app
+
+
+# ============================================================
 # Theme & Modern Windows 11 Fluent Design System
 # ============================================================
 
@@ -234,6 +302,8 @@ class ThemeSystem:
             val = theme_config.lower()
             if val in ("system", "light", "dark"):
                 self.mode = val
+                if "mode" in self.custom_overrides:
+                    self.custom_overrides["mode"] = val
             else:
                 raise BlazeValueError(f"Invalid theme mode '{theme_config}'. Use 'system', 'light', or 'dark'.")
         elif isinstance(theme_config, dict) or hasattr(theme_config, "properties"):
@@ -243,6 +313,14 @@ class ThemeSystem:
             self.custom_overrides.update(normalized)
         else:
             raise BlazeTypeError("SetTheme expects a string or style dictionary")
+
+        # Dynamically refresh active windows
+        for win in list(Window._ACTIVE_WINDOWS):
+            if win._window_widget is not None and not win._destroyed:
+                try:
+                    win._apply_style()
+                except Exception:
+                    pass
 
 
 _GLOBAL_THEME = ThemeSystem()
@@ -277,38 +355,57 @@ def _normalize_dict(style: Any) -> Dict[str, Any]:
     raise BlazeTypeError("GUI style expects an object or dictionary")
 
 
-def _safe_config(widget, option: str, value: Any):
-    if value is None:
-        return
-    try:
-        widget.configure(**{option: value})
-    except (tk.TclError, TypeError, ValueError):
-        pass
-
-
-def _parse_font(style: Dict[str, Any], palette: Dict[str, Any]) -> Tuple[str, int, str, str]:
+def _parse_font(style: Dict[str, Any], palette: Dict[str, Any]) -> QFont:
     font_val = style.get("font")
     family = style.get("font_family", style.get("fontFamily", palette.get("fontFamily", "Segoe UI")))
     size = style.get("font_size", style.get("fontSize", palette.get("fontSize", 10)))
     weight = style.get("font_weight", style.get("fontWeight", "normal"))
-    bold = style.get("bold", False) or (weight == "bold" or weight == "semibold")
+    bold = style.get("bold", False) or (weight in ("bold", "semibold"))
     italic = style.get("italic", False)
 
     if isinstance(font_val, (int, float)):
         size = int(font_val)
     elif isinstance(font_val, str):
-        return font_val
-    elif isinstance(font_val, (tuple, list)):
-        return tuple(font_val)
+        parts = font_val.split()
+        if parts:
+            family = parts[0]
+            if len(parts) > 1 and parts[1].isdigit():
+                size = int(parts[1])
 
     try:
         size = int(size)
     except Exception:
         size = 10
 
-    w_str = "bold" if bold else "normal"
-    s_str = "italic" if italic else "roman"
-    return (str(family), size, w_str, s_str)
+    qfont = QFont(str(family), size)
+    if bold:
+        qfont.setBold(True)
+    if italic:
+        qfont.setItalic(True)
+    return qfont
+
+
+def _safe_config(widget: QWidget, option: str, value: Any):
+    """Compatibility helper mimicking legacy widget option assignment."""
+    if widget is None or value is None:
+        return
+    try:
+        if option in ("background", "bg"):
+            p = widget.palette()
+            p.setColor(widget.backgroundRole(), QColor(str(value)))
+            widget.setPalette(p)
+        elif option in ("foreground", "fg"):
+            p = widget.palette()
+            p.setColor(widget.foregroundRole(), QColor(str(value)))
+            widget.setPalette(p)
+        elif option == "state":
+            widget.setEnabled(value != "disabled")
+        elif option == "width":
+            widget.setFixedWidth(int(value))
+        elif option == "height":
+            widget.setFixedHeight(int(value))
+    except Exception:
+        pass
 
 
 class _DestroyedError(BlazeRuntimeError):
@@ -343,6 +440,47 @@ class GUIStyle:
 
 
 # ============================================================
+# Event Filter Helper for Qt Widgets
+# ============================================================
+
+class _QtEventFilter(QObject):
+    """Handles hover, focus, blur, and keyboard events cleanly on Qt widgets."""
+
+    def __init__(self, component: "GUIComponent"):
+        super().__init__()
+        self._comp = component
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if self._comp._destroyed:
+            return False
+
+        etype = event.type()
+        if etype == QEvent.Type.Enter:
+            self._comp._dispatch_event("hover", True)
+        elif etype == QEvent.Type.Leave:
+            self._comp._dispatch_event("hover", False)
+        elif etype == QEvent.Type.FocusIn:
+            self._comp._dispatch_event("focus")
+        elif etype == QEvent.Type.FocusOut:
+            self._comp._dispatch_event("blur")
+        elif etype == QEvent.Type.KeyPress:
+            key_text = event.text() or event.keyCombination().key().name
+            self._comp._dispatch_event("keyDown", key_text)
+        elif etype == QEvent.Type.KeyRelease:
+            key_text = event.text() or event.keyCombination().key().name
+            self._comp._dispatch_event("keyUp", key_text)
+        elif etype == QEvent.Type.MouseButtonDblClick:
+            self._comp._dispatch_event("doubleClick")
+        elif etype == QEvent.Type.ContextMenu:
+            if "contextMenu" in self._comp._callbacks:
+                menu = self._comp._callbacks["contextMenu"]
+                menu._show_popup(event.globalPos())
+                return True
+
+        return super().eventFilter(watched, event)
+
+
+# ============================================================
 # Component Base Class
 # ============================================================
 
@@ -351,7 +489,7 @@ class GUIComponent:
     kind = "Component"
 
     def __init__(self):
-        self._widget: Optional[tk.Widget] = None
+        self._widget: Optional[QWidget] = None
         self._window: Optional["Window"] = None
         self._destroyed = False
         self._visible = True
@@ -359,6 +497,7 @@ class GUIComponent:
         self._style: Dict[str, Any] = {}
         self._callbacks: Dict[str, Any] = {}
         self._interpreter = None
+        self._event_filter: Optional[_QtEventFilter] = None
 
     def _ensure_alive(self):
         if self._destroyed:
@@ -406,20 +545,14 @@ class GUIComponent:
         self._ensure_alive()
         self._visible = True
         if self._widget is not None:
-            try:
-                self._widget.pack()
-            except tk.TclError:
-                pass
+            self._widget.show()
         return self
 
     def Hide(self):
         self._ensure_alive()
         self._visible = False
         if self._widget is not None:
-            try:
-                self._widget.pack_forget()
-            except tk.TclError:
-                pass
+            self._widget.hide()
         return self
 
     def SetVisible(self, visible: bool):
@@ -429,14 +562,14 @@ class GUIComponent:
         self._ensure_alive()
         self._enabled = True
         if self._widget is not None:
-            _safe_config(self._widget, "state", "normal")
+            self._widget.setEnabled(True)
         return self
 
     def Disable(self):
         self._ensure_alive()
         self._enabled = False
         if self._widget is not None:
-            _safe_config(self._widget, "state", "disabled")
+            self._widget.setEnabled(False)
         return self
 
     def SetEnabled(self, enabled: bool):
@@ -445,10 +578,7 @@ class GUIComponent:
     def Focus(self):
         self._ensure_alive()
         if self._widget is not None:
-            try:
-                self._widget.focus_set()
-            except Exception:
-                pass
+            self._widget.setFocus()
         return self
 
     # --------------------------------------------------------
@@ -457,14 +587,14 @@ class GUIComponent:
 
     def SetWidth(self, width: Any):
         self._style["width"] = width
-        if self._widget is not None:
-            self._apply_style()
+        if self._widget is not None and isinstance(width, (int, float)):
+            self._widget.setFixedWidth(int(width))
         return self
 
     def SetHeight(self, height: Any):
         self._style["height"] = height
-        if self._widget is not None:
-            self._apply_style()
+        if self._widget is not None and isinstance(height, (int, float)):
+            self._widget.setFixedHeight(int(height))
         return self
 
     def SetPadding(self, padding: Any):
@@ -513,10 +643,7 @@ class GUIComponent:
 
     def SetContextMenu(self, menu: Any):
         self._ensure_alive()
-        if hasattr(menu, "_show_popup"):
-            if self._widget is not None:
-                self._widget.bind("<Button-3>", lambda e: menu._show_popup(e))
-            self._callbacks["contextMenu"] = menu
+        self._callbacks["contextMenu"] = menu
         return self
 
     def _dispatch_event(self, event_name: str, *args):
@@ -550,17 +677,12 @@ class GUIComponent:
             if self.right_comp:
                 self.right_comp._reset_widget_tree()
 
-    def _realize(self, parent: tk.Widget) -> tk.Widget:
+    def _realize(self, parent: Optional[QWidget]) -> QWidget:
         self._ensure_alive()
-        if self._widget is not None:
-            try:
-                if not self._widget.winfo_exists():
-                    self._reset_widget_tree()
-            except Exception:
-                self._reset_widget_tree()
-
         if self._widget is None:
             self._widget = self._build(parent)
+            self._widget.setEnabled(self._enabled)
+            self._widget.setVisible(self._visible)
             self._apply_style()
             self._bind_events()
         return self._widget
@@ -568,21 +690,9 @@ class GUIComponent:
     def _bind_events(self):
         if self._widget is None:
             return
-        if "hover" in self._callbacks:
-            self._widget.bind("<Enter>", lambda e: self._dispatch_event("hover", True))
-            self._widget.bind("<Leave>", lambda e: self._dispatch_event("hover", False))
-        if "focus" in self._callbacks or "blur" in self._callbacks:
-            self._widget.bind("<FocusIn>", lambda e: self._dispatch_event("focus"))
-            self._widget.bind("<FocusOut>", lambda e: self._dispatch_event("blur"))
-        if "keyDown" in self._callbacks:
-            self._widget.bind("<KeyPress>", lambda e: self._dispatch_event("keyDown", e.keysym))
-        if "keyUp" in self._callbacks:
-            self._widget.bind("<KeyRelease>", lambda e: self._dispatch_event("keyUp", e.keysym))
-        if "doubleClick" in self._callbacks:
-            self._widget.bind("<Double-Button-1>", lambda e: self._dispatch_event("doubleClick"))
-        if "contextMenu" in self._callbacks:
-            menu = self._callbacks["contextMenu"]
-            self._widget.bind("<Button-3>", lambda e: menu._show_popup(e))
+        if self._event_filter is None:
+            self._event_filter = _QtEventFilter(self)
+            self._widget.installEventFilter(self._event_filter)
 
     def _apply_style(self):
         if self._widget is None:
@@ -590,30 +700,15 @@ class GUIComponent:
         palette = _GLOBAL_THEME.get_palette()
         style = self._style
 
-        bg = style.get("background", style.get("bg", palette["surface"]))
-        fg = style.get("foreground", style.get("color", palette["foreground"]))
-        font = _parse_font(style, palette)
+        qfont = _parse_font(style, palette)
+        self._widget.setFont(qfont)
+
         width = style.get("width")
         height = style.get("height")
-        cursor = style.get("cursor")
-        relief = style.get("relief", "flat")
-        border = style.get("border", style.get("borderWidth", 0))
-
-        _safe_config(self._widget, "background", bg)
-        _safe_config(self._widget, "bg", bg)
-        _safe_config(self._widget, "foreground", fg)
-        _safe_config(self._widget, "fg", fg)
-        _safe_config(self._widget, "font", font)
-        _safe_config(self._widget, "relief", relief)
-        _safe_config(self._widget, "bd", border)
-        _safe_config(self._widget, "borderwidth", border)
-        if cursor is not None:
-            _safe_config(self._widget, "cursor", cursor)
-
         if width is not None and isinstance(width, (int, float)):
-            _safe_config(self._widget, "width", int(width))
+            self._widget.setFixedWidth(int(width))
         if height is not None and isinstance(height, (int, float)):
-            _safe_config(self._widget, "height", int(height))
+            self._widget.setFixedHeight(int(height))
 
 
 # ============================================================
@@ -642,25 +737,26 @@ class Label(GUIComponent):
             if "alignment" in options:
                 self._style["alignment"] = options["alignment"]
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        align_map = {"center": "center", "right": "e", "left": "w"}
-        anchor = align_map.get(self._style.get("alignment", "left"), "w")
-        widget = tk.Label(
-            parent,
-            text=self.text,
-            anchor=anchor,
-            bg=palette["surface"],
-            fg=palette["foreground"],
-            bd=0,
-        )
-        return widget
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        lbl = QLabel(self.text, parent)
+        lbl.setWordWrap(True)
+        self._apply_alignment(lbl)
+        return lbl
+
+    def _apply_alignment(self, lbl: QLabel):
+        align_map = {
+            "center": Qt.AlignmentFlag.AlignCenter,
+            "right": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            "left": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        }
+        align = align_map.get(self._style.get("alignment", "left"), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        lbl.setAlignment(align)
 
     def SetText(self, text: str):
         self._ensure_alive()
         self.text = str(text)
-        if self._widget is not None:
-            self._widget.config(text=self.text)
+        if self._widget is not None and isinstance(self._widget, QLabel):
+            self._widget.setText(self.text)
         return self
 
     def GetText(self) -> str:
@@ -673,7 +769,18 @@ class Label(GUIComponent):
         return self.SetStyleValue("fontWeight", weight)
 
     def SetAlignment(self, alignment: str):
-        return self.SetStyleValue("alignment", alignment)
+        self.SetStyleValue("alignment", alignment)
+        if self._widget is not None and isinstance(self._widget, QLabel):
+            self._apply_alignment(self._widget)
+        return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        fg = self._style.get("foreground", self._style.get("color", palette["foreground"]))
+        self._widget.setStyleSheet(f"color: {fg}; background: transparent;")
 
 
 class Text(Label):
@@ -681,7 +788,7 @@ class Text(Label):
 
 
 # ============================================================
-# Icon Component & Renderer
+# Icon Component
 # ============================================================
 
 class Icon(GUIComponent):
@@ -710,18 +817,20 @@ class Icon(GUIComponent):
         self.name = name
         self.size = size
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
         glyph = self.ICON_MAP.get(self.name.lower(), self.name)
-        widget = tk.Label(
-            parent,
-            text=glyph,
-            font=("Segoe UI Symbol", self.size),
-            bg=palette["surface"],
-            fg=palette["foreground"],
-            bd=0,
-        )
-        return widget
+        lbl = QLabel(glyph, parent)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = QFont("Segoe UI Symbol", self.size)
+        lbl.setFont(font)
+        return lbl
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is not None:
+            palette = _GLOBAL_THEME.get_palette()
+            fg = self._style.get("foreground", palette["foreground"])
+            self._widget.setStyleSheet(f"color: {fg}; background: transparent;")
 
 
 # ============================================================
@@ -749,32 +858,23 @@ class Button(GUIComponent):
         else:
             self.text = str(text_or_opts)
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        display_text = self.text
+    def _get_display_text(self) -> str:
         if self.icon:
             glyph = Icon.ICON_MAP.get(str(self.icon).lower(), str(self.icon))
-            display_text = f"{glyph}  {self.text}"
+            return f"{glyph}  {self.text}"
+        return self.text
 
-        widget = tk.Button(
-            parent,
-            text=display_text,
-            command=self._on_click_cmd,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            takefocus=True,
-        )
-        return widget
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        btn = QPushButton(self._get_display_text(), parent)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(self._on_click_cmd)
+        return btn
 
     def SetText(self, text: str):
         self._ensure_alive()
         self.text = str(text)
-        if self._widget is not None:
-            display_text = self.text
-            if self.icon:
-                glyph = Icon.ICON_MAP.get(str(self.icon).lower(), str(self.icon))
-                display_text = f"{glyph}  {self.text}"
-            self._widget.config(text=display_text)
+        if self._widget is not None and isinstance(self._widget, QPushButton):
+            self._widget.setText(self._get_display_text())
         return self
 
     def SetIcon(self, icon: str):
@@ -792,60 +892,81 @@ class Button(GUIComponent):
         self._dispatch_event("click")
 
     def _apply_style(self):
+        super()._apply_style()
         if self._widget is None:
             return
         palette = _GLOBAL_THEME.get_palette()
         variant = self._style.get("variant", self.variant)
+        radius = self._style.get("radius", palette.get("radius", 6))
 
         bg = palette["surfaceSecondary"]
         fg = palette["foreground"]
-        active_bg = palette["surfaceTertiary"]
+        hover_bg = palette["surfaceTertiary"]
+        pressed_bg = palette["surfaceTertiary"]
+        border = palette["border"]
 
         if variant == "primary":
             bg = palette["accent"]
             fg = palette["accentText"]
-            active_bg = palette["accentHover"]
+            hover_bg = palette["accentHover"]
+            pressed_bg = palette["accentPressed"]
+            border = "transparent"
         elif variant == "danger":
             bg = palette["danger"]
             fg = "#ffffff"
-            active_bg = palette["dangerHover"]
+            hover_bg = palette["dangerHover"]
+            pressed_bg = palette["dangerHover"]
+            border = "transparent"
         elif variant == "success":
             bg = palette["success"]
             fg = "#ffffff"
-            active_bg = palette["success"]
+            hover_bg = palette["success"]
+            pressed_bg = palette["success"]
+            border = "transparent"
         elif variant == "outline":
-            bg = palette["surface"]
+            bg = "transparent"
             fg = palette["foreground"]
-            active_bg = palette["surfaceSecondary"]
-            _safe_config(self._widget, "highlightbackground", palette["border"])
-            _safe_config(self._widget, "highlightthickness", 1)
+            hover_bg = palette["surfaceSecondary"]
+            pressed_bg = palette["surfaceTertiary"]
+            border = palette["border"]
         elif variant == "subtle":
-            bg = palette["surface"]
+            bg = "transparent"
             fg = palette["foreground"]
-            active_bg = palette["surfaceSecondary"]
+            hover_bg = palette["surfaceSecondary"]
+            pressed_bg = palette["surfaceTertiary"]
+            border = "transparent"
 
         bg = self._style.get("background", self._style.get("bg", bg))
         fg = self._style.get("foreground", self._style.get("color", fg))
-        active_bg = self._style.get("active_background", self._style.get("hover_background", active_bg))
 
-        _safe_config(self._widget, "background", bg)
-        _safe_config(self._widget, "bg", bg)
-        _safe_config(self._widget, "foreground", fg)
-        _safe_config(self._widget, "fg", fg)
-        _safe_config(self._widget, "activebackground", active_bg)
-        _safe_config(self._widget, "activeforeground", fg)
-        _safe_config(self._widget, "font", _parse_font(self._style, palette))
-
-        # Smooth interactive hover feedback
-        try:
-            self._widget.bind("<Enter>", lambda e, b=bg, ab=active_bg: _safe_config(self._widget, "bg", ab), add="+")
-            self._widget.bind("<Leave>", lambda e, b=bg: _safe_config(self._widget, "bg", b), add="+")
-        except Exception:
-            pass
-
+        height_rule = ""
         height = self._style.get("height")
         if height is not None and isinstance(height, (int, float)):
-            _safe_config(self._widget, "height", int(height))
+            height_rule = f"min-height: {int(height)}px; max-height: {int(height)}px;"
+
+        qss = f"""
+        QPushButton {{
+            background-color: {bg};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: {radius}px;
+            padding: 6px 14px;
+            font-family: "{palette.get('fontFamily', 'Segoe UI')}";
+            {height_rule}
+        }}
+        QPushButton:hover {{
+            background-color: {hover_bg};
+        }}
+        QPushButton:pressed {{
+            background-color: {pressed_bg};
+        }}
+        QPushButton:disabled {{
+            background-color: {palette['surfaceTertiary']};
+            color: {palette['foregroundSecondary']};
+            border-color: {palette['border']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 # ============================================================
@@ -854,7 +975,7 @@ class Button(GUIComponent):
 
 class Input(GUIComponent):
     kind = "Input"
-    _show_char = None
+    _is_password = False
 
     def __init__(self, val_or_opts: Any = ""):
         super().__init__()
@@ -874,104 +995,116 @@ class Input(GUIComponent):
         else:
             self.initial_value = str(val_or_opts)
 
-        self._var: Optional[tk.StringVar] = None
         self._changing = False
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        self._var = tk.StringVar(value=self.initial_value)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        entry = QLineEdit(self.initial_value, parent)
+        if self.placeholder:
+            entry.setPlaceholderText(self.placeholder)
+        if self.readonly:
+            entry.setReadOnly(True)
 
-        justify = self._style.get("alignment", "left")
+        align_map = {
+            "center": Qt.AlignmentFlag.AlignCenter,
+            "right": Qt.AlignmentFlag.AlignRight,
+            "left": Qt.AlignmentFlag.AlignLeft,
+        }
+        align = align_map.get(self._style.get("alignment", "left"), Qt.AlignmentFlag.AlignLeft)
+        entry.setAlignment(align)
 
-        frame = tk.Frame(parent, bg=palette["inputBg"], bd=1, relief="solid")
-        frame.configure(highlightbackground=palette["inputBorder"], highlightcolor=palette["inputFocusBorder"], highlightthickness=1)
+        if self._is_password:
+            entry.setEchoMode(QLineEdit.EchoMode.Password)
+            self._setup_password_action(entry)
 
-        kwargs = {}
-        if self._show_char is not None:
-            kwargs["show"] = self._show_char
+        entry.textChanged.connect(self._on_text_changed)
+        entry.returnPressed.connect(lambda: self._dispatch_event("submit", self.GetValue()))
+        return entry
 
-        entry = tk.Entry(
-            frame,
-            textvariable=self._var,
-            relief="flat",
-            bd=0,
-            bg=palette["inputBg"],
-            fg=palette["foreground"],
-            justify=justify,
-            state="readonly" if self.readonly else "normal",
-            insertbackground=palette["foreground"],
-            **kwargs,
-        )
-        entry.pack(fill="both", expand=True, padx=6, pady=6)
+    def _setup_password_action(self, entry: QLineEdit):
+        action = QAction("👁", entry)
+        entry.addAction(action, QLineEdit.ActionPosition.TrailingPosition)
+        showing = [False]
 
-        if hasattr(self, "_add_extra_widgets"):
-            self._add_extra_widgets(frame, entry)
+        def toggle():
+            showing[0] = not showing[0]
+            entry.setEchoMode(QLineEdit.EchoMode.Normal if showing[0] else QLineEdit.EchoMode.Password)
 
-        self._var.trace_add("write", lambda *_: self._on_change_cmd())
-        entry.bind("<Return>", lambda e: self._dispatch_event("submit", self.GetValue()))
+        action.triggered.connect(toggle)
 
-        return frame
-
-    def _on_change_cmd(self):
+    def _on_text_changed(self, text: str):
         if not self._changing:
-            self._dispatch_event("change", self.GetValue())
+            self._dispatch_event("change", text)
 
     def GetValue(self) -> str:
         self._ensure_alive()
-        return self._var.get() if self._var is not None else self.initial_value
+        if self._widget is not None and isinstance(self._widget, QLineEdit):
+            return self._widget.text()
+        return self.initial_value
 
     def SetValue(self, value: str):
         self._ensure_alive()
         self.initial_value = str(value)
-        if self._var is not None:
+        if self._widget is not None and isinstance(self._widget, QLineEdit):
             self._changing = True
             try:
-                self._var.set(self.initial_value)
+                self._widget.setText(self.initial_value)
             finally:
                 self._changing = False
         return self
 
     def SetPlaceholder(self, placeholder: str):
         self.placeholder = str(placeholder)
+        if self._widget is not None and isinstance(self._widget, QLineEdit):
+            self._widget.setPlaceholderText(self.placeholder)
         return self
 
     def SetReadOnly(self, readonly: bool):
         self.readonly = bool(readonly)
-        if self._widget is not None:
-            _safe_config(self._widget, "state", "readonly" if self.readonly else "normal")
+        if self._widget is not None and isinstance(self._widget, QLineEdit):
+            self._widget.setReadOnly(self.readonly)
         return self
 
     def Clear(self):
         return self.SetValue("")
 
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        radius = self._style.get("radius", palette.get("radius", 6))
+        bg = palette["inputBg"]
+        fg = palette["foreground"]
+        border = palette["inputBorder"]
+        focus_border = palette["inputFocusBorder"]
+
+        qss = f"""
+        QLineEdit {{
+            background-color: {bg};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: {radius}px;
+            padding: 6px 8px;
+            selection-background-color: {palette['accent']};
+            selection-color: {palette['accentText']};
+        }}
+        QLineEdit:focus {{
+            border: 2px solid {focus_border};
+        }}
+        QLineEdit:read-only {{
+            background-color: {palette['surfaceSecondary']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
+
 
 class PasswordInput(Input):
     kind = "PasswordInput"
-    _show_char = "•"
+    _is_password = True
 
     def __init__(self, val_or_opts: Any = ""):
         super().__init__(val_or_opts)
         self.reveal_enabled = True
-
-    def _add_extra_widgets(self, frame: tk.Frame, entry: tk.Entry):
-        palette = _GLOBAL_THEME.get_palette()
-        btn = tk.Button(
-            frame,
-            text="👁",
-            bd=0,
-            relief="flat",
-            bg=palette["inputBg"],
-            fg=palette["foregroundSecondary"],
-            cursor="hand2",
-        )
-        btn.pack(side="right", padx=4)
-        showing = [True]
-
-        def toggle_reveal():
-            showing[0] = not showing[0]
-            entry.config(show="•" if showing[0] else "")
-
-        btn.config(command=toggle_reveal)
 
 
 # ============================================================
@@ -993,47 +1126,117 @@ class Checkbox(GUIComponent):
         else:
             self.text = str(text_or_opts)
 
-        self._var: Optional[tk.BooleanVar] = None
-
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        self._var = tk.BooleanVar(value=self.initial_checked)
-
-        widget = tk.Checkbutton(
-            parent,
-            text=self.text,
-            variable=self._var,
-            command=lambda: self._dispatch_event("change", self.IsChecked()),
-            anchor="w",
-            bd=0,
-            bg=palette["surface"],
-            fg=palette["foreground"],
-            activebackground=palette["surface"],
-            activeforeground=palette["foreground"],
-            selectcolor=palette["surfaceSecondary"],
-            highlightthickness=0,
-        )
-        return widget
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        cb = QCheckBox(self.text, parent)
+        cb.setChecked(self.initial_checked)
+        cb.toggled.connect(lambda val: self._dispatch_event("change", val))
+        return cb
 
     def IsChecked(self) -> bool:
         self._ensure_alive()
-        return bool(self._var.get()) if self._var is not None else self.initial_checked
+        if self._widget is not None and isinstance(self._widget, QCheckBox):
+            return self._widget.isChecked()
+        return self.initial_checked
 
     def SetChecked(self, value: bool):
         self._ensure_alive()
         self.initial_checked = bool(value)
-        if self._var is not None:
-            self._var.set(self.initial_checked)
+        if self._widget is not None and isinstance(self._widget, QCheckBox):
+            self._widget.setChecked(self.initial_checked)
         return self
 
     def SetText(self, text: str):
         self.text = str(text)
-        if self._widget is not None:
-            self._widget.config(text=self.text)
+        if self._widget is not None and isinstance(self._widget, QCheckBox):
+            self._widget.setText(self.text)
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        fg = palette["foreground"]
+        qss = f"""
+        QCheckBox {{
+            color: {fg};
+            spacing: 8px;
+            background: transparent;
+        }}
+        QCheckBox::indicator {{
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid {palette['border']};
+            background-color: {palette['surface']};
+        }}
+        QCheckBox::indicator:checked {{
+            background-color: {palette['accent']};
+            border-color: {palette['accent']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 CheckBox = Checkbox
+
+
+class _QtToggleSwitch(QWidget):
+    """Modern Windows 11 pill toggle switch implementation."""
+
+    def __init__(self, text: str = "", checked: bool = False, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._text = text
+        self._checked = checked
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(26)
+
+    def isChecked(self) -> bool:
+        return self._checked
+
+    def setChecked(self, checked: bool):
+        if self._checked != checked:
+            self._checked = checked
+            self.update()
+
+    def setText(self, text: str):
+        self._text = text
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._checked = not self._checked
+            self.update()
+            if hasattr(self, "_on_toggle"):
+                self._on_toggle(self._checked)
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        palette = _GLOBAL_THEME.get_palette()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw pill track
+        track_w, track_h = 40, 20
+        track_y = (self.height() - track_h) // 2
+        bg_col = QColor(palette["accent"] if self._checked else palette["surfaceTertiary"])
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(bg_col))
+        painter.drawRoundedRect(0, track_y, track_w, track_h, track_h // 2, track_h // 2)
+
+        # Draw knob
+        knob_dia = 14
+        knob_y = track_y + (track_h - knob_dia) // 2
+        knob_x = track_w - knob_dia - 3 if self._checked else 3
+        knob_col = QColor(palette["accentText"] if self._checked else palette["foregroundSecondary"])
+        painter.setBrush(QBrush(knob_col))
+        painter.drawEllipse(knob_x, knob_y, knob_dia, knob_dia)
+
+        # Draw label text
+        if self._text:
+            painter.setPen(QPen(QColor(palette["foreground"])))
+            painter.setFont(self.font())
+            painter.drawText(track_w + 10, self.height() // 2 + 5, self._text)
 
 
 class Toggle(GUIComponent):
@@ -1054,50 +1257,28 @@ class Toggle(GUIComponent):
 
         self.checked = self.initial_checked
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        frame = tk.Frame(parent, bg=palette["surface"])
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        widget = _QtToggleSwitch(self.text, self.checked, parent)
+        widget._on_toggle = self._on_toggled
+        return widget
 
-        self.canvas = tk.Canvas(frame, width=40, height=20, bg=palette["surface"], highlightthickness=0, cursor="hand2")
-        self.canvas.pack(side="left")
-
-        self.lbl = tk.Label(frame, text=self.text, bg=palette["surface"], fg=palette["foreground"])
-        self.lbl.pack(side="left", padx=8)
-
-        self._draw_switch()
-
-        self.canvas.bind("<Button-1>", lambda e: self.toggle())
-        self.lbl.bind("<Button-1>", lambda e: self.toggle())
-
-        return frame
-
-    def _draw_switch(self):
-        palette = _GLOBAL_THEME.get_palette()
-        self.canvas.delete("all")
-        bg_col = palette["accent"] if self.checked else palette["surfaceTertiary"]
-        knob_col = palette["accentText"] if self.checked else palette["foregroundSecondary"]
-
-        # Pill background
-        self.canvas.create_oval(2, 2, 20, 18, fill=bg_col, outline="")
-        self.canvas.create_oval(20, 2, 38, 18, fill=bg_col, outline="")
-        self.canvas.create_rectangle(11, 2, 29, 18, fill=bg_col, outline="")
-
-        # Knob
-        kx = 22 if self.checked else 4
-        self.canvas.create_oval(kx, 4, kx + 14, 16, fill=knob_col, outline="")
+    def _on_toggled(self, checked: bool):
+        self.checked = checked
+        self._dispatch_event("change", self.checked)
 
     def toggle(self):
-        self.checked = not self.checked
-        self._draw_switch()
+        self.SetChecked(not self.checked)
         self._dispatch_event("change", self.checked)
 
     def IsChecked(self) -> bool:
+        if self._widget is not None and isinstance(self._widget, _QtToggleSwitch):
+            return self._widget.isChecked()
         return self.checked
 
     def SetChecked(self, value: bool):
         self.checked = bool(value)
-        if hasattr(self, "canvas"):
-            self._draw_switch()
+        if self._widget is not None and isinstance(self._widget, _QtToggleSwitch):
+            self._widget.setChecked(self.checked)
         return self
 
 
@@ -1106,7 +1287,7 @@ Switch = Toggle
 
 class Radio(GUIComponent):
     kind = "Radio"
-    _GROUPS: Dict[str, Any] = {}
+    _GROUPS: Dict[str, QButtonGroup] = {}
     _INITIAL_GROUPS: Dict[str, str] = {}
 
     def __init__(self, text: str = "", group: str = "default", value: str = None):
@@ -1116,59 +1297,75 @@ class Radio(GUIComponent):
         self.value = value if value is not None else text
 
     @classmethod
-    def _get_group_var(cls, group: str) -> Optional[tk.StringVar]:
+    def _get_group(cls, group: str) -> QButtonGroup:
         if group not in cls._GROUPS:
-            if tk._default_root is not None:
-                initial = cls._INITIAL_GROUPS.get(group, "")
-                cls._GROUPS[group] = tk.StringVar(value=initial)
-            else:
-                return None
+            cls._GROUPS[group] = QButtonGroup()
         return cls._GROUPS[group]
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        var = self._get_group_var(self.group)
-        if var is None:
-            initial = Radio._INITIAL_GROUPS.get(self.group, "")
-            Radio._GROUPS[self.group] = tk.StringVar(master=parent, value=initial)
-            var = Radio._GROUPS[self.group]
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        rb = QRadioButton(self.text, parent)
+        group_obj = self._get_group(self.group)
+        group_obj.addButton(rb)
+        if not hasattr(group_obj, "_val_map"):
+            group_obj._val_map = {}
+        group_obj._val_map[rb] = self.value
 
-        widget = tk.Radiobutton(
-            parent,
-            text=self.text,
-            value=self.value,
-            variable=var,
-            command=lambda: self._dispatch_event("change", self.GetValue()),
-            anchor="w",
-            bd=0,
-            bg=palette["surface"],
-            fg=palette["foreground"],
-            activebackground=palette["surface"],
-            activeforeground=palette["foreground"],
-            selectcolor=palette["surfaceSecondary"],
-            highlightthickness=0,
-        )
-        return widget
+        initial = Radio._INITIAL_GROUPS.get(self.group)
+        if initial is not None and initial == self.value:
+            rb.setChecked(True)
+
+        rb.toggled.connect(self._on_toggled)
+        return rb
+
+    def _on_toggled(self, checked: bool):
+        if checked:
+            Radio._INITIAL_GROUPS[self.group] = self.value
+            self._dispatch_event("change", self.GetValue())
 
     def IsChecked(self) -> bool:
-        var = self._get_group_var(self.group)
-        if var is not None:
-            return var.get() == self.value
+        if self._widget is not None and isinstance(self._widget, QRadioButton):
+            return self._widget.isChecked()
         return Radio._INITIAL_GROUPS.get(self.group) == self.value
 
     def SetChecked(self, checked: bool):
         if checked:
             Radio._INITIAL_GROUPS[self.group] = self.value
-            var = self._get_group_var(self.group)
-            if var is not None:
-                var.set(self.value)
+            if self._widget is not None and isinstance(self._widget, QRadioButton):
+                self._widget.setChecked(True)
         return self
 
     def GetValue(self) -> str:
-        var = self._get_group_var(self.group)
-        if var is not None:
-            return var.get()
+        if self._widget is not None and isinstance(self._widget, QRadioButton):
+            group_obj = self._get_group(self.group)
+            checked_btn = group_obj.checkedButton()
+            if checked_btn is not None and hasattr(group_obj, "_val_map"):
+                return group_obj._val_map.get(checked_btn, Radio._INITIAL_GROUPS.get(self.group, ""))
         return Radio._INITIAL_GROUPS.get(self.group, "")
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        qss = f"""
+        QRadioButton {{
+            color: {palette['foreground']};
+            spacing: 8px;
+            background: transparent;
+        }}
+        QRadioButton::indicator {{
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            border: 1px solid {palette['border']};
+            background-color: {palette['surface']};
+        }}
+        QRadioButton::indicator:checked {{
+            background-color: {palette['accent']};
+            border-color: {palette['accent']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 # ============================================================
@@ -1193,45 +1390,87 @@ class ComboBox(GUIComponent):
         if self.items and not self.initial_value:
             self.initial_value = self.items[0]
 
-        self._combo: Optional[ttk.Combobox] = None
+        self._changing = False
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        self._combo = ttk.Combobox(parent, values=self.items, state="readonly")
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        combo = QComboBox(parent)
+        for item in self.items:
+            combo.addItem(item)
+
         if self.initial_value:
-            self._combo.set(self.initial_value)
-        self._combo.bind("<<ComboboxSelected>>", lambda e: self._dispatch_event("change", self.GetValue()))
-        return self._combo
+            combo.setCurrentText(self.initial_value)
+
+        combo.currentTextChanged.connect(self._on_selection_changed)
+        return combo
+
+    def _on_selection_changed(self, text: str):
+        if not self._changing:
+            self._dispatch_event("change", text)
 
     def GetValue(self) -> str:
         self._ensure_alive()
-        return self._combo.get() if self._combo is not None else self.initial_value
+        if self._widget is not None and isinstance(self._widget, QComboBox):
+            return self._widget.currentText()
+        return self.initial_value
 
     def SetValue(self, value: str):
         self._ensure_alive()
         self.initial_value = str(value)
-        if self._combo is not None:
-            self._combo.set(self.initial_value)
+        if self._widget is not None and isinstance(self._widget, QComboBox):
+            self._changing = True
+            try:
+                self._widget.setCurrentText(self.initial_value)
+            finally:
+                self._changing = False
         return self
 
     def AddItem(self, item: str):
         self.items.append(str(item))
-        if self._combo is not None:
-            self._combo["values"] = self.items
+        if self._widget is not None and isinstance(self._widget, QComboBox):
+            self._widget.addItem(str(item))
         return self
 
     def RemoveItem(self, item: str):
         if str(item) in self.items:
             self.items.remove(str(item))
-            if self._combo is not None:
-                self._combo["values"] = self.items
+            if self._widget is not None and isinstance(self._widget, QComboBox):
+                idx = self._widget.findText(str(item))
+                if idx >= 0:
+                    self._widget.removeItem(idx)
         return self
 
     def Clear(self):
         self.items.clear()
-        if self._combo is not None:
-            self._combo["values"] = []
-            self._combo.set("")
+        if self._widget is not None and isinstance(self._widget, QComboBox):
+            self._widget.clear()
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        radius = self._style.get("radius", palette.get("radius", 6))
+        qss = f"""
+        QComboBox {{
+            background-color: {palette['inputBg']};
+            color: {palette['foreground']};
+            border: 1px solid {palette['inputBorder']};
+            border-radius: {radius}px;
+            padding: 6px 12px;
+        }}
+        QComboBox:focus {{
+            border: 2px solid {palette['inputFocusBorder']};
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {palette['surface']};
+            color: {palette['foreground']};
+            selection-background-color: {palette['accent']};
+            selection-color: {palette['accentText']};
+            border: 1px solid {palette['border']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class Slider(GUIComponent):
@@ -1239,9 +1478,9 @@ class Slider(GUIComponent):
 
     def __init__(self, min_or_opts: Any = 0, max_val: float = 100, val: float = 50):
         super().__init__()
-        self.min = 0
-        self.max = 100
-        self.value = 50
+        self.min = 0.0
+        self.max = 100.0
+        self.value = 50.0
 
         if isinstance(min_or_opts, dict) or hasattr(min_or_opts, "properties"):
             opts = _normalize_dict(min_or_opts)
@@ -1253,36 +1492,52 @@ class Slider(GUIComponent):
             self.max = float(max_val)
             self.value = float(val)
 
-        self._scale: Optional[tk.Scale] = None
-
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        self._scale = tk.Scale(
-            parent,
-            from_=self.min,
-            to=self.max,
-            orient="horizontal",
-            command=lambda v: self._dispatch_event("change", float(v)),
-            bg=palette["surface"],
-            fg=palette["foreground"],
-            highlightthickness=0,
-            bd=0,
-            troughcolor=palette["surfaceSecondary"],
-            activebackground=palette["accent"],
-        )
-        self._scale.set(self.value)
-        return self._scale
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        slider = QSlider(Qt.Orientation.Horizontal, parent)
+        slider.setRange(int(self.min), int(self.max))
+        slider.setValue(int(self.value))
+        slider.valueChanged.connect(lambda v: self._dispatch_event("change", float(v)))
+        return slider
 
     def GetValue(self) -> float:
         self._ensure_alive()
-        return float(self._scale.get()) if self._scale is not None else self.value
+        if self._widget is not None and isinstance(self._widget, QSlider):
+            return float(self._widget.value())
+        return self.value
 
     def SetValue(self, value: float):
         self._ensure_alive()
         self.value = float(value)
-        if self._scale is not None:
-            self._scale.set(self.value)
+        if self._widget is not None and isinstance(self._widget, QSlider):
+            self._widget.setValue(int(self.value))
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        qss = f"""
+        QSlider::groove:horizontal {{
+            border: none;
+            height: 4px;
+            background: {palette['surfaceTertiary']};
+            border-radius: 2px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: {palette['accent']};
+            border-radius: 2px;
+        }}
+        QSlider::handle:horizontal {{
+            background: {palette['accent']};
+            border: 2px solid {palette['surface']};
+            width: 16px;
+            margin-top: -6px;
+            margin-bottom: -6px;
+            border-radius: 8px;
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class ProgressBar(GUIComponent):
@@ -1290,33 +1545,55 @@ class ProgressBar(GUIComponent):
 
     def __init__(self, val_or_opts: Any = 0):
         super().__init__()
-        self.value = 0
+        self.value = 0.0
         if isinstance(val_or_opts, dict) or hasattr(val_or_opts, "properties"):
             opts = _normalize_dict(val_or_opts)
             self.value = float(opts.get("value", 0))
         else:
             self.value = float(val_or_opts)
-        self._bar: Optional[ttk.Progressbar] = None
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        self._bar = ttk.Progressbar(parent, value=self.value, maximum=100)
-        return self._bar
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        bar = QProgressBar(parent)
+        bar.setRange(0, 100)
+        bar.setValue(int(self.value))
+        bar.setTextVisible(False)
+        return bar
 
     def SetValue(self, value: float):
         self._ensure_alive()
         self.value = float(value)
-        if self._bar is not None:
-            self._bar["value"] = self.value
+        if self._widget is not None and isinstance(self._widget, QProgressBar):
+            self._widget.setValue(int(self.value))
         return self
 
     def SetIndeterminate(self, indeterminate: bool):
-        if self._bar is not None:
-            self._bar["mode"] = "indeterminate" if indeterminate else "determinate"
+        if self._widget is not None and isinstance(self._widget, QProgressBar):
             if indeterminate:
-                self._bar.start(10)
+                self._widget.setRange(0, 0)
             else:
-                self._bar.stop()
+                self._widget.setRange(0, 100)
+                self._widget.setValue(int(self.value))
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        radius = palette.get("radius", 6)
+        qss = f"""
+        QProgressBar {{
+            background-color: {palette['surfaceTertiary']};
+            border-radius: {radius}px;
+            max-height: 6px;
+            text-align: center;
+        }}
+        QProgressBar::chunk {{
+            background-color: {palette['accent']};
+            border-radius: {radius}px;
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class TextArea(GUIComponent):
@@ -1325,64 +1602,84 @@ class TextArea(GUIComponent):
     def __init__(self, placeholder_or_opts: Any = ""):
         super().__init__()
         self.placeholder = ""
-        self.wrap = "word"
+        self.wrap = True
         self.initial_value = ""
 
         if isinstance(placeholder_or_opts, dict) or hasattr(placeholder_or_opts, "properties"):
             opts = _normalize_dict(placeholder_or_opts)
             self.placeholder = str(opts.get("placeholder", ""))
             self.initial_value = str(opts.get("value", ""))
-            self.wrap = "word" if opts.get("wrap", True) else "none"
+            self.wrap = bool(opts.get("wrap", True))
         else:
             self.placeholder = str(placeholder_or_opts)
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        widget = tk.Text(
-            parent,
-            height=6,
-            width=40,
-            relief="flat",
-            bd=0,
-            wrap=self.wrap,
-            bg=palette["inputBg"],
-            fg=palette["foreground"],
-            insertbackground=palette["foreground"],
-            highlightbackground=palette["inputBorder"],
-            highlightcolor=palette["inputFocusBorder"],
-            highlightthickness=1,
-        )
-        if self.initial_value:
-            widget.insert("1.0", self.initial_value)
-        widget.bind("<<Modified>>", lambda e: self._on_mod(widget))
-        return widget
+        self._changing = False
 
-    def _on_mod(self, widget: tk.Text):
-        if widget.edit_modified():
-            widget.edit_modified(False)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        text_edit = QTextEdit(parent)
+        if self.placeholder:
+            text_edit.setPlaceholderText(self.placeholder)
+        if self.initial_value:
+            text_edit.setPlainText(self.initial_value)
+
+        text_edit.setLineWrapMode(
+            QTextEdit.LineWrapMode.WidgetWidth if self.wrap else QTextEdit.LineWrapMode.NoWrap
+        )
+        text_edit.textChanged.connect(self._on_text_changed)
+        return text_edit
+
+    def _on_text_changed(self):
+        if not self._changing:
             self._dispatch_event("change", self.GetValue())
 
     def GetValue(self) -> str:
         self._ensure_alive()
-        return self._widget.get("1.0", "end-1c") if self._widget is not None else self.initial_value
+        if self._widget is not None and isinstance(self._widget, QTextEdit):
+            return self._widget.toPlainText()
+        return self.initial_value
 
     def SetValue(self, value: str):
         self._ensure_alive()
         self.initial_value = str(value)
-        if self._widget is not None:
-            self._widget.delete("1.0", "end")
-            self._widget.insert("1.0", self.initial_value)
+        if self._widget is not None and isinstance(self._widget, QTextEdit):
+            self._changing = True
+            try:
+                self._widget.setPlainText(self.initial_value)
+            finally:
+                self._changing = False
         return self
 
     def Append(self, text: str):
         self._ensure_alive()
         self.initial_value += str(text)
-        if self._widget is not None:
-            self._widget.insert("end", str(text))
+        if self._widget is not None and isinstance(self._widget, QTextEdit):
+            self._widget.append(str(text))
         return self
 
     def Clear(self):
         return self.SetValue("")
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        radius = self._style.get("radius", palette.get("radius", 6))
+        qss = f"""
+        QTextEdit {{
+            background-color: {palette['inputBg']};
+            color: {palette['foreground']};
+            border: 1px solid {palette['inputBorder']};
+            border-radius: {radius}px;
+            padding: 8px;
+            selection-background-color: {palette['accent']};
+            selection-color: {palette['accentText']};
+        }}
+        QTextEdit:focus {{
+            border: 2px solid {palette['inputFocusBorder']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 # ============================================================
@@ -1408,73 +1705,79 @@ class Image(GUIComponent):
         else:
             self.source = src_or_opts
 
-        self._img_ref = None
-
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        lbl = tk.Label(parent, bg=palette["surface"], bd=0)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        lbl = QLabel(parent)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._update_image(lbl)
         return lbl
 
-    def _update_image(self, lbl: tk.Label):
+    def _update_image(self, lbl: QLabel):
         if not self.source:
             return
         try:
-            from PIL import Image as PILImage, ImageTk
-            pil_img = None
+            pixmap = None
 
-            if hasattr(self.source, "_image"):  # BlazeImage
-                pil_img = self.source._image
-            elif hasattr(self.source, "AddListener") and callable(getattr(self.source, "AddListener", None)):  # BlazeVideo
+            # Case 1: BlazeImage or object wrapping PIL image
+            if hasattr(self.source, "_image"):
+                from PIL import ImageQt
+                qimg = ImageQt.ImageQt(self.source._image)
+                pixmap = QPixmap.fromImage(qimg)
+
+            # Case 2: BlazeVideo object
+            elif hasattr(self.source, "AddListener") and callable(getattr(self.source, "AddListener", None)):
                 def on_frame(frame):
-                    if not lbl.winfo_exists():
-                        return
                     try:
+                        from PIL import ImageQt
+                        qimg = ImageQt.ImageQt(frame)
+                        pix = QPixmap.fromImage(qimg)
                         if self.req_width and self.req_height:
-                            frame = frame.resize((int(self.req_width), int(self.req_height)))
-                        self._img_ref = ImageTk.PhotoImage(frame)
-                        lbl.config(image=self._img_ref)
+                            pix = pix.scaled(int(self.req_width), int(self.req_height), Qt.AspectRatioMode.KeepAspectRatio)
+                        lbl.setPixmap(pix)
                     except Exception:
                         pass
 
                 self.source.AddListener(on_frame)
                 if hasattr(self.source, "_bind_widget"):
                     self.source._bind_widget(lbl)
-                pil_img = self.source.GetFrame()
-            elif isinstance(self.source, str) and os.path.isfile(self.source):
-                pil_img = PILImage.open(self.source)
+                frame = self.source.GetFrame()
+                if frame is not None:
+                    from PIL import ImageQt
+                    qimg = ImageQt.ImageQt(frame)
+                    pixmap = QPixmap.fromImage(qimg)
 
-            if pil_img is not None:
+            # Case 3: File path
+            elif isinstance(self.source, str) and os.path.isfile(self.source):
+                pixmap = QPixmap(self.source)
+
+            if pixmap is not None and not pixmap.isNull():
                 if self.req_width and self.req_height:
-                    pil_img = pil_img.resize((int(self.req_width), int(self.req_height)))
-                self._img_ref = ImageTk.PhotoImage(pil_img)
-                lbl.config(image=self._img_ref)
-                return
+                    aspect_mode = (
+                        Qt.AspectRatioMode.KeepAspectRatio
+                        if self.stretch == "contain"
+                        else Qt.AspectRatioMode.IgnoreAspectRatio
+                    )
+                    pixmap = pixmap.scaled(int(self.req_width), int(self.req_height), aspect_mode)
+                lbl.setPixmap(pixmap)
         except Exception:
             pass
 
-        if isinstance(self.source, str) and os.path.isfile(self.source):
-            try:
-                self._img_ref = tk.PhotoImage(file=self.source)
-                lbl.config(image=self._img_ref)
-            except Exception:
-                pass
-
     def SetSource(self, source: Any):
         self.source = source
-        if self._widget is not None:
+        if self._widget is not None and isinstance(self._widget, QLabel):
             self._update_image(self._widget)
         return self
 
     def SetSize(self, width: int, height: int):
         self.req_width = width
         self.req_height = height
-        if self._widget is not None:
+        if self._widget is not None and isinstance(self._widget, QLabel):
             self._update_image(self._widget)
         return self
 
     def SetStretch(self, stretch: str):
         self.stretch = stretch
+        if self._widget is not None and isinstance(self._widget, QLabel):
+            self._update_image(self._widget)
         return self
 
 
@@ -1496,27 +1799,24 @@ class VideoWidget(GUIComponent):
         else:
             self.video = video_or_opts
 
-        self._img_ref = None
-
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        lbl = tk.Label(parent, bg=palette["surface"], bd=0)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        lbl = QLabel(parent)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._attach_video(lbl)
         return lbl
 
-    def _attach_video(self, lbl: tk.Label):
+    def _attach_video(self, lbl: QLabel):
         if self.video is None:
             return
-        from PIL import ImageTk
 
         def on_frame(pil_img):
-            if not lbl.winfo_exists():
-                return
             try:
+                from PIL import ImageQt
+                qimg = ImageQt.ImageQt(pil_img)
+                pixmap = QPixmap.fromImage(qimg)
                 if self.req_width and self.req_height:
-                    pil_img = pil_img.resize((int(self.req_width), int(self.req_height)))
-                self._img_ref = ImageTk.PhotoImage(pil_img)
-                lbl.config(image=self._img_ref)
+                    pixmap = pixmap.scaled(int(self.req_width), int(self.req_height), Qt.AspectRatioMode.KeepAspectRatio)
+                lbl.setPixmap(pixmap)
             except Exception:
                 pass
 
@@ -1527,7 +1827,7 @@ class VideoWidget(GUIComponent):
 
     def SetVideo(self, video: Any):
         self.video = video
-        if self._widget is not None:
+        if self._widget is not None and isinstance(self._widget, QLabel):
             self._attach_video(self._widget)
         return self
 
@@ -1537,7 +1837,7 @@ class VideoWidget(GUIComponent):
     def SetSize(self, width: int, height: int):
         self.req_width = width
         self.req_height = height
-        if self._widget is not None:
+        if self._widget is not None and isinstance(self._widget, QLabel):
             self._attach_video(self._widget)
         return self
 
@@ -1548,11 +1848,12 @@ class VideoWidget(GUIComponent):
 
 class Container(GUIComponent):
     kind = "Container"
-    _pack_side = "top"
+    _layout_type = "vertical"
 
     def __init__(self, opts: Any = None):
         super().__init__()
         self.children: List[GUIComponent] = []
+        self._layout: Optional[Union[QVBoxLayout, QHBoxLayout]] = None
         if opts:
             self._style.update(_normalize_dict(opts))
 
@@ -1566,7 +1867,7 @@ class Container(GUIComponent):
                 raise BlazeTypeError(f"{self.kind}.Add expects GUI components, got {type(comp).__name__}")
             self.children.append(comp)
             comp._window = self._window
-            if self._widget is not None:
+            if self._widget is not None and self._layout is not None:
                 self._attach_child(comp)
         return self
 
@@ -1575,7 +1876,9 @@ class Container(GUIComponent):
         if component in self.children:
             self.children.remove(component)
             if component._widget is not None:
-                component._widget.destroy()
+                if self._layout is not None:
+                    self._layout.removeWidget(component._widget)
+                component._widget.deleteLater()
                 component._widget = None
         return self
 
@@ -1585,40 +1888,62 @@ class Container(GUIComponent):
             self.Remove(child)
         return self
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        bg = self._style.get("background", self._style.get("bg", palette["surface"]))
-        frame = tk.Frame(parent, bg=bg, bd=0, highlightthickness=0)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        frame = QFrame(parent)
+        if self._layout_type == "horizontal":
+            self._layout = QHBoxLayout(frame)
+        else:
+            self._layout = QVBoxLayout(frame)
+
+        pad = int(self._style.get("padding", 4))
+        self._layout.setContentsMargins(pad, pad, pad, pad)
+        self._layout.setSpacing(int(self._style.get("spacing", 4)))
         return frame
 
     def _attach_child(self, component: GUIComponent):
         component._window = self._window
-        widget = component._realize(self._widget)
-        if isinstance(self, Row):
-            widget.pack(side="left", fill="both", expand=True, padx=2, pady=2)
-        else:
-            widget.pack(side=self._pack_side, fill="x", padx=2, pady=2)
+        w = component._realize(self._widget)
+        if self._layout is not None:
+            self._layout.addWidget(w)
 
-    def _realize(self, parent: tk.Widget) -> tk.Widget:
+    def _realize(self, parent: Optional[QWidget]) -> QWidget:
         widget = super()._realize(parent)
         for child in self.children:
             self._attach_child(child)
         return widget
 
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        bg = self._style.get("background", self._style.get("bg", palette["surface"]))
+        border = self._style.get("border", "transparent")
+        radius = self._style.get("radius", 0)
+
+        qss = f"""
+        QFrame {{
+            background-color: {bg};
+            border: 1px solid {border};
+            border-radius: {radius}px;
+        }}
+        """
+        self._widget.setStyleSheet(qss)
+
 
 class Panel(Container):
     kind = "Panel"
-    _pack_side = "top"
+    _layout_type = "vertical"
 
 
 class Column(Container):
     kind = "Column"
-    _pack_side = "top"
+    _layout_type = "vertical"
 
 
 class Row(Container):
     kind = "Row"
-    _pack_side = "left"
+    _layout_type = "horizontal"
 
 
 class Stack(Container):
@@ -1628,23 +1953,36 @@ class Stack(Container):
         super().__init__(opts)
         opts_dict = _normalize_dict(opts) if opts else {}
         direction = opts_dict.get("direction", "vertical")
-        self._pack_side = "left" if direction == "horizontal" else "top"
+        self._layout_type = "horizontal" if direction == "horizontal" else "vertical"
 
 
 class Card(Container):
     kind = "Card"
-
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        bg = self._style.get("background", palette["cardBg"])
-        border = self._style.get("border", palette["cardBorder"])
-        frame = tk.Frame(parent, bg=bg, bd=1, relief="solid")
-        frame.configure(highlightbackground=border, highlightthickness=1)
-        return frame
+    _layout_type = "vertical"
 
     def SetRadius(self, radius: int):
         self._style["radius"] = radius
+        if self._widget is not None:
+            self._apply_style()
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        bg = self._style.get("background", palette["cardBg"])
+        border = self._style.get("border", palette["cardBorder"])
+        radius = self._style.get("radius", palette.get("radius", 8))
+
+        qss = f"""
+        QFrame {{
+            background-color: {bg};
+            border: 1px solid {border};
+            border-radius: {radius}px;
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class Grid(Container):
@@ -1658,6 +1996,7 @@ class Grid(Container):
         self.spacing = int(opts_dict.get("spacing", 4))
         self.grid_positions: Dict[GUIComponent, Tuple[int, int, int, int]] = {}
         self._auto_idx = 0
+        self._grid_layout: Optional[QGridLayout] = None
 
     def Add(self, component: Any, row: Optional[int] = None, col: Optional[int] = None, rowspan: int = 1, colspan: int = 1):
         self._ensure_alive()
@@ -1675,56 +2014,49 @@ class Grid(Container):
         self.grid_positions[component] = (r, c, int(rowspan), int(colspan))
         component._window = self._window
 
-        if self._widget is not None:
+        if self._widget is not None and self._grid_layout is not None:
             self._attach_child(component)
         return self
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        frame = tk.Frame(parent, bg=palette["surface"], bd=0)
-        for c in range(self.cols):
-            frame.columnconfigure(c, weight=1)
-        for r in range(self.rows):
-            frame.rowconfigure(r, weight=1)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        frame = QFrame(parent)
+        self._grid_layout = QGridLayout(frame)
+        self._grid_layout.setSpacing(self.spacing)
+        pad = int(self._style.get("padding", 4))
+        self._grid_layout.setContentsMargins(pad, pad, pad, pad)
         return frame
 
     def _attach_child(self, component: GUIComponent):
         component._window = self._window
-        widget = component._realize(self._widget)
+        w = component._realize(self._widget)
         r, c, rs, cs = self.grid_positions.get(component, (0, 0, 1, 1))
-        widget.grid(row=r, column=c, rowspan=rs, columnspan=cs, sticky="nsew", padx=self.spacing, pady=self.spacing)
+        if self._grid_layout is not None:
+            self._grid_layout.addWidget(w, r, c, rs, cs)
 
 
 class ScrollView(Container):
     kind = "ScrollView"
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        outer = tk.Frame(parent, bg=palette["surface"])
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        scroll_area = QScrollArea(parent)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
 
-        canvas = tk.Canvas(outer, bg=palette["surface"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=palette["surface"])
+        inner_frame = QFrame()
+        self._layout = QVBoxLayout(inner_frame)
+        self._layout.setContentsMargins(4, 4, 4, 4)
+        self._layout.setSpacing(4)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        self._inner_frame = scrollable_frame
-        return outer
+        scroll_area.setWidget(inner_frame)
+        self._inner_frame = inner_frame
+        return scroll_area
 
     def _attach_child(self, component: GUIComponent):
         component._window = self._window
-        inner = getattr(self, "_inner_frame", self._widget)
-        widget = component._realize(inner)
-        widget.pack(side="top", fill="x", padx=4, pady=4)
+        w = component._realize(self._inner_frame)
+        if self._layout is not None:
+            self._layout.addWidget(w)
 
 
 class SplitView(GUIComponent):
@@ -1749,16 +2081,21 @@ class SplitView(GUIComponent):
     SetTop = SetLeft
     SetBottom = SetRight
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        orient = "horizontal" if self.orientation == "horizontal" else "vertical"
-        paned = ttk.PanedWindow(parent, orient=orient)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        orient = Qt.Orientation.Horizontal if self.orientation == "horizontal" else Qt.Orientation.Vertical
+        splitter = QSplitter(orient, parent)
         if self.left_comp:
-            w1 = self.left_comp._realize(paned)
-            paned.add(w1, weight=1)
+            w1 = self.left_comp._realize(splitter)
+            splitter.addWidget(w1)
         if self.right_comp:
-            w2 = self.right_comp._realize(paned)
-            paned.add(w2, weight=3)
-        return paned
+            w2 = self.right_comp._realize(splitter)
+            splitter.addWidget(w2)
+
+        total = 1000
+        left_size = int(total * self.ratio)
+        right_size = total - left_size
+        splitter.setSizes([left_size, right_size])
+        return splitter
 
 
 class Spacer(GUIComponent):
@@ -1775,10 +2112,13 @@ class Spacer(GUIComponent):
         elif isinstance(size_or_opts, (int, float)):
             self.size = int(size_or_opts)
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        frame = tk.Frame(parent, bg=palette["surface"], height=self.size, width=self.size)
-        return frame
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        w = QWidget(parent)
+        if self.expand:
+            w.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        else:
+            w.setFixedSize(self.size, self.size)
+        return w
 
 
 class Divider(GUIComponent):
@@ -1788,13 +2128,22 @@ class Divider(GUIComponent):
         super().__init__()
         self.orient = orient
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        line = QFrame(parent)
         if self.orient == "horizontal":
-            sep = tk.Frame(parent, bg=palette["border"], height=1)
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setFixedHeight(1)
         else:
-            sep = tk.Frame(parent, bg=palette["border"], width=1)
-        return sep
+            line.setFrameShape(QFrame.Shape.VLine)
+            line.setFixedWidth(1)
+        return line
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        self._widget.setStyleSheet(f"background-color: {palette['border']}; border: none;")
 
 
 # ============================================================
@@ -1807,46 +2156,69 @@ class Tabs(GUIComponent):
     def __init__(self):
         super().__init__()
         self.tabs_map: Dict[str, Container] = {}
-        self._notebook: Optional[ttk.Notebook] = None
+        self._tab_widget: Optional[QTabWidget] = None
 
     def Add(self, title: str) -> Container:
         panel = Container()
         self.tabs_map[title] = panel
-        if self._notebook is not None:
-            w = panel._realize(self._notebook)
-            self._notebook.add(w, text=title)
+        if self._tab_widget is not None:
+            w = panel._realize(self._tab_widget)
+            self._tab_widget.addTab(w, title)
         return panel
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        self._notebook = ttk.Notebook(parent)
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        self._tab_widget = QTabWidget(parent)
         for title, panel in self.tabs_map.items():
-            w = panel._realize(self._notebook)
-            self._notebook.add(w, text=title)
-        self._notebook.bind("<<NotebookTabChanged>>", lambda e: self._dispatch_event("change", self.GetSelected()))
-        return self._notebook
+            w = panel._realize(self._tab_widget)
+            self._tab_widget.addTab(w, title)
+        self._tab_widget.currentChanged.connect(lambda idx: self._dispatch_event("change", self.GetSelected()))
+        return self._tab_widget
 
     def Select(self, title: str):
-        if title in self.tabs_map and self._notebook is not None:
+        if title in self.tabs_map and self._tab_widget is not None:
             idx = list(self.tabs_map.keys()).index(title)
-            self._notebook.select(idx)
+            self._tab_widget.setCurrentIndex(idx)
         return self
 
     def GetSelected(self) -> str:
-        if self._notebook is not None:
-            try:
-                idx = self._notebook.index(self._notebook.select())
-                return list(self.tabs_map.keys())[idx]
-            except Exception:
-                pass
+        if self._tab_widget is not None:
+            idx = self._tab_widget.currentIndex()
+            keys = list(self.tabs_map.keys())
+            if 0 <= idx < len(keys):
+                return keys[idx]
         return ""
 
     def Remove(self, title: str):
         if title in self.tabs_map:
             idx = list(self.tabs_map.keys()).index(title)
             del self.tabs_map[title]
-            if self._notebook is not None:
-                self._notebook.forget(idx)
+            if self._tab_widget is not None:
+                self._tab_widget.removeTab(idx)
         return self
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        qss = f"""
+        QTabWidget::pane {{
+            border: 1px solid {palette['border']};
+            background-color: {palette['surface']};
+        }}
+        QTabBar::tab {{
+            background-color: {palette['surfaceSecondary']};
+            color: {palette['foreground']};
+            padding: 8px 16px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }}
+        QTabBar::tab:selected {{
+            background-color: {palette['surface']};
+            border-bottom: 2px solid {palette['accent']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class NavigationView(GUIComponent):
@@ -1857,6 +2229,9 @@ class NavigationView(GUIComponent):
         super().__init__()
         self.nav_items: List[Tuple[str, GUIComponent, str]] = []
         self.active_title = ""
+        self.btn_map: Dict[str, QPushButton] = {}
+        self.content_area: Optional[QFrame] = None
+        self.content_layout: Optional[QVBoxLayout] = None
 
     def Add(self, title: str, content: GUIComponent, icon: str = "home"):
         self.nav_items.append((title, content, icon))
@@ -1864,39 +2239,39 @@ class NavigationView(GUIComponent):
             self.active_title = title
         return self
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        root_frame = tk.Frame(parent, bg=palette["surface"])
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        root = QWidget(parent)
+        layout = QHBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         # Sidebar
-        sidebar = tk.Frame(root_frame, bg=palette["surfaceSecondary"], width=180)
-        sidebar.pack(side="left", fill="y")
+        sidebar = QFrame(root)
+        sidebar.setFixedWidth(200)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(6, 6, 6, 6)
+        sidebar_layout.setSpacing(4)
+        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # Content Container
-        self.content_area = tk.Frame(root_frame, bg=palette["surface"])
-        self.content_area.pack(side="right", fill="both", expand=True)
+        # Content Area
+        self.content_area = QFrame(root)
+        self.content_layout = QVBoxLayout(self.content_area)
+        self.content_layout.setContentsMargins(8, 8, 8, 8)
+
+        layout.addWidget(sidebar)
+        layout.addWidget(self.content_area, 1)
 
         self.btn_map = {}
         for title, content, icon_name in self.nav_items:
             glyph = Icon.ICON_MAP.get(icon_name.lower(), "📄")
-            btn = tk.Button(
-                sidebar,
-                text=f"  {glyph}  {title}",
-                anchor="w",
-                relief="flat",
-                bd=0,
-                bg=palette["surfaceSecondary"],
-                fg=palette["foreground"],
-                activebackground=palette["surfaceTertiary"],
-                font=("Segoe UI", 10),
-                cursor="hand2",
-                command=lambda t=title: self.Select(t),
-            )
-            btn.pack(fill="x", padx=4, pady=2)
+            btn = QPushButton(f"  {glyph}  {title}", sidebar)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _, t=title: self.Select(t))
+            sidebar_layout.addWidget(btn)
             self.btn_map[title] = btn
 
         self._show_active_content()
-        return root_frame
+        return root
 
     def Select(self, title: str):
         self.active_title = title
@@ -1908,22 +2283,52 @@ class NavigationView(GUIComponent):
         return self.active_title
 
     def _show_active_content(self):
-        if not hasattr(self, "content_area"):
+        if self.content_area is None or self.content_layout is None:
             return
+
         palette = _GLOBAL_THEME.get_palette()
-        for child in self.content_area.winfo_children():
-            child.destroy()
+
+        # Update button highlights
         for title, btn in self.btn_map.items():
             if title == self.active_title:
-                btn.config(bg=palette["accent"], fg=palette["accentText"])
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {palette['accent']};
+                        color: {palette['accentText']};
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        text-align: left;
+                    }}
+                """)
             else:
-                btn.config(bg=palette["surfaceSecondary"], fg=palette["foreground"])
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        color: {palette['foreground']};
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        text-align: left;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {palette['surfaceTertiary']};
+                    }}
+                """)
 
+        # Clear existing content
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+
+        # Show selected content
         for title, content, _ in self.nav_items:
             if title == self.active_title:
                 content._reset_widget_tree()
                 w = content._realize(self.content_area)
-                w.pack(fill="both", expand=True)
+                self.content_layout.addWidget(w)
                 break
 
 
@@ -1935,28 +2340,29 @@ class Table(GUIComponent):
         opts_dict = _normalize_dict(opts) if opts else {}
         self.columns = list(opts_dict.get("columns", ["Column 1"]))
         self.rows: List[List[Any]] = []
-        self._tree: Optional[ttk.Treeview] = None
+        self._table: Optional[QTableWidget] = None
 
     def AddRow(self, row: List[Any]):
         self.rows.append(list(row))
-        if self._tree is not None:
-            self._tree.insert("", "end", values=row)
+        if self._table is not None:
+            row_idx = self._table.rowCount()
+            self._table.insertRow(row_idx)
+            for col_idx, val in enumerate(row):
+                item = QTableWidgetItem(str(val))
+                self._table.setItem(row_idx, col_idx, item)
         return self
 
     def Clear(self):
         self.rows.clear()
-        if self._tree is not None:
-            for item in self._tree.get_children():
-                self._tree.delete(item)
+        if self._table is not None:
+            self._table.setRowCount(0)
         return self
 
     def RemoveRow(self, index: int):
         if 0 <= index < len(self.rows):
             del self.rows[index]
-            if self._tree is not None:
-                children = self._tree.get_children()
-                if 0 <= index < len(children):
-                    self._tree.delete(children[index])
+            if self._table is not None:
+                self._table.removeRow(index)
         return self
 
     def GetRows(self) -> List[List[Any]]:
@@ -1965,29 +2371,49 @@ class Table(GUIComponent):
     def OnSelect(self, callback: Any):
         return self._register_event("select", callback)
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        frame = tk.Frame(parent)
-        self._tree = ttk.Treeview(frame, columns=self.columns, show="headings")
-        for col in self.columns:
-            self._tree.heading(col, text=col)
-            self._tree.column(col, width=120)
-        for row in self.rows:
-            self._tree.insert("", "end", values=row)
-        self._tree.bind("<<TreeviewSelect>>", lambda e: self._on_tree_select())
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        self._table = QTableWidget(len(self.rows), len(self.columns), parent)
+        self._table.setHorizontalHeaderLabels(self.columns)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
-        scroll = ttk.Scrollbar(frame, orient="vertical", command=self._tree.yview)
-        self._tree.configure(yscrollcommand=scroll.set)
+        for row_idx, row in enumerate(self.rows):
+            for col_idx, val in enumerate(row):
+                self._table.setItem(row_idx, col_idx, QTableWidgetItem(str(val)))
 
-        self._tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        return frame
+        self._table.itemSelectionChanged.connect(self._on_selection_changed)
+        return self._table
 
-    def _on_tree_select(self):
-        if self._tree is not None:
-            selected = self._tree.selection()
-            if selected:
-                vals = self._tree.item(selected[0])["values"]
-                self._dispatch_event("select", vals)
+    def _on_selection_changed(self):
+        if self._table is not None:
+            selected_rows = self._table.selectionModel().selectedRows()
+            if selected_rows:
+                idx = selected_rows[0].row()
+                if 0 <= idx < len(self.rows):
+                    self._dispatch_event("select", self.rows[idx])
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        qss = f"""
+        QTableWidget {{
+            background-color: {palette['surface']};
+            color: {palette['foreground']};
+            border: 1px solid {palette['border']};
+            gridline-color: {palette['border']};
+            selection-background-color: {palette['accent']};
+            selection-color: {palette['accentText']};
+        }}
+        QHeaderView::section {{
+            background-color: {palette['surfaceSecondary']};
+            color: {palette['foreground']};
+            padding: 4px;
+            border: 1px solid {palette['border']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 class List(GUIComponent):
@@ -2001,56 +2427,63 @@ class List(GUIComponent):
         elif isinstance(items_or_opts, dict) or hasattr(items_or_opts, "properties"):
             opts = _normalize_dict(items_or_opts)
             self.items = [str(x) for x in opts.get("items", [])]
-        self._listbox: Optional[tk.Listbox] = None
+        self._list_widget: Optional[QListWidget] = None
 
     def AddItem(self, item: str):
         self.items.append(str(item))
-        if self._listbox is not None:
-            self._listbox.insert("end", str(item))
+        if self._list_widget is not None:
+            self._list_widget.addItem(str(item))
         return self
 
     def RemoveItem(self, item: str):
         if str(item) in self.items:
             idx = self.items.index(str(item))
             del self.items[idx]
-            if self._listbox is not None:
-                self._listbox.delete(idx)
+            if self._list_widget is not None:
+                item_obj = self._list_widget.takeItem(idx)
+                del item_obj
         return self
 
     def Clear(self):
         self.items.clear()
-        if self._listbox is not None:
-            self._listbox.delete(0, "end")
+        if self._list_widget is not None:
+            self._list_widget.clear()
         return self
 
     def GetSelected(self) -> str:
-        if self._listbox is not None:
-            sel = self._listbox.curselection()
-            if sel:
-                return self.items[sel[0]]
+        if self._list_widget is not None:
+            cur = self._list_widget.currentItem()
+            if cur is not None:
+                return cur.text()
         return ""
 
     def OnSelect(self, callback: Any):
         return self._register_event("select", callback)
 
-    def _build(self, parent: tk.Widget) -> tk.Widget:
-        palette = _GLOBAL_THEME.get_palette()
-        frame = tk.Frame(parent, bg=palette["surface"])
-        self._listbox = tk.Listbox(
-            frame,
-            bg=palette["inputBg"],
-            fg=palette["foreground"],
-            selectbackground=palette["accent"],
-            selectforeground=palette["accentText"],
-            bd=0,
-            highlightthickness=1,
-            highlightbackground=palette["border"],
-        )
+    def _build(self, parent: Optional[QWidget]) -> QWidget:
+        self._list_widget = QListWidget(parent)
         for item in self.items:
-            self._listbox.insert("end", item)
-        self._listbox.bind("<<ListboxSelect>>", lambda e: self._dispatch_event("select", self.GetSelected()))
-        self._listbox.pack(side="left", fill="both", expand=True)
-        return frame
+            self._list_widget.addItem(item)
+        self._list_widget.currentItemChanged.connect(
+            lambda cur, prev: self._dispatch_event("select", cur.text() if cur else "")
+        )
+        return self._list_widget
+
+    def _apply_style(self):
+        super()._apply_style()
+        if self._widget is None:
+            return
+        palette = _GLOBAL_THEME.get_palette()
+        qss = f"""
+        QListWidget {{
+            background-color: {palette['inputBg']};
+            color: {palette['foreground']};
+            border: 1px solid {palette['border']};
+            selection-background-color: {palette['accent']};
+            selection-color: {palette['accentText']};
+        }}
+        """
+        self._widget.setStyleSheet(qss)
 
 
 # ============================================================
@@ -2058,51 +2491,54 @@ class List(GUIComponent):
 # ============================================================
 
 class MenuBar:
-    def __init__(self, root: tk.Tk = None):
+    def __init__(self, root: Optional[QMainWindow] = None):
         self.root = root
-        self.menu = None
+        self._menubar: Optional[QMenuBar] = None
 
     def Add(self, title: str) -> "Menu":
-        if self.menu is None and self.root is not None:
-            self.menu = tk.Menu(self.root)
-            self.root.config(menu=self.menu)
-        sub = tk.Menu(self.menu, tearoff=0)
-        if self.menu:
-            self.menu.add_cascade(label=title, menu=sub)
-        return Menu(sub)
+        if self._menubar is None and self.root is not None:
+            self._menubar = self.root.menuBar()
+        sub_menu = QMenu(title, self._menubar)
+        if self._menubar is not None:
+            self._menubar.addMenu(sub_menu)
+        return Menu(sub_menu)
 
 
 class Menu:
-    def __init__(self, tk_menu: tk.Menu):
-        self.tk_menu = tk_menu
+    def __init__(self, qmenu: QMenu):
+        self.qmenu = qmenu
         self._interpreter = None
 
     def Add(self, label: str, callback: Any):
+        action = QAction(label, self.qmenu)
+
         def _cmd():
             if self._interpreter is not None:
                 _invoke_callback(self._interpreter, callback, [])
 
-        self.tk_menu.add_command(label=label, command=_cmd)
+        action.triggered.connect(_cmd)
+        self.qmenu.addAction(action)
         return self
 
     def Separator(self):
-        self.tk_menu.add_separator()
+        self.qmenu.addSeparator()
         return self
 
 
 class ContextMenu(Menu):
     def __init__(self):
-        super().__init__(tk.Menu(None, tearoff=0))
+        super().__init__(QMenu())
 
-    def _show_popup(self, event):
+    def _show_popup(self, global_pos):
         try:
-            self.tk_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            self.tk_menu.grab_release()
+            self.qmenu.exec(global_pos)
+        except Exception:
+            pass
 
 
 class Toolbar(Container):
     kind = "Toolbar"
+    _layout_type = "horizontal"
 
     def AddButton(self, text: str, callback: Any, icon: str = None):
         btn = Button({"text": text, "icon": icon, "variant": "subtle"})
@@ -2116,29 +2552,43 @@ class Toolbar(Container):
 # ============================================================
 
 def Alert(title: str, message: str):
-    messagebox.showinfo(str(title), str(message))
+    _get_or_create_qapp()
+    QMessageBox.information(None, str(title), str(message))
 
 
 def Confirm(title: str, message: str) -> bool:
-    return messagebox.askyesno(str(title), str(message))
+    _get_or_create_qapp()
+    ret = QMessageBox.question(
+        None,
+        str(title),
+        str(message),
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+    )
+    return ret == QMessageBox.StandardButton.Yes
 
 
 def OpenFile(opts: Any = None) -> str:
+    _get_or_create_qapp()
     opts_dict = _normalize_dict(opts) if opts else {}
     title = opts_dict.get("title", "Open File")
-    return filedialog.askopenfilename(title=title) or ""
+    file_path, _ = QFileDialog.getOpenFileName(None, title)
+    return file_path or ""
 
 
 def SaveFile(opts: Any = None) -> str:
+    _get_or_create_qapp()
     opts_dict = _normalize_dict(opts) if opts else {}
     title = opts_dict.get("title", "Save File")
-    return filedialog.asksaveasfilename(title=title) or ""
+    file_path, _ = QFileDialog.getSaveFileName(None, title)
+    return file_path or ""
 
 
 def SelectFolder(opts: Any = None) -> str:
+    _get_or_create_qapp()
     opts_dict = _normalize_dict(opts) if opts else {}
     title = opts_dict.get("title", "Select Folder")
-    return filedialog.askdirectory(title=title) or ""
+    folder_path = QFileDialog.getExistingDirectory(None, title)
+    return folder_path or ""
 
 
 # ============================================================
@@ -2146,6 +2596,8 @@ def SelectFolder(opts: Any = None) -> str:
 # ============================================================
 
 class Window:
+    _ACTIVE_WINDOWS: List["Window"] = []
+
     def __init__(self, title_or_opts: Any, width: int = 800, height: int = 600):
         self.title = "BlazeLang GUI"
         self.width = 800
@@ -2181,11 +2633,16 @@ class Window:
             self.height = int(height)
 
         self.children: List[GUIComponent] = []
-        self._root: Optional[tk.Tk] = None
+        self._window_widget: Optional[QMainWindow] = None
+        self._central_widget: Optional[QWidget] = None
+        self._central_layout: Optional[QVBoxLayout] = None
         self._running = False
         self._destroyed = False
         self._style: Dict[str, Any] = {}
         self._callbacks: Dict[str, Any] = {}
+        self._interpreter = None
+
+        Window._ACTIVE_WINDOWS.append(self)
 
     def _ensure_alive(self):
         if self._destroyed:
@@ -2194,8 +2651,8 @@ class Window:
     def SetTitle(self, title: str):
         self._ensure_alive()
         self.title = str(title)
-        if self._root is not None:
-            self._root.title(self.title)
+        if self._window_widget is not None:
+            self._window_widget.setWindowTitle(self.title)
         return self
 
     def GetTitle(self) -> str:
@@ -2205,20 +2662,21 @@ class Window:
         self._ensure_alive()
         self.width = int(width)
         self.height = int(height)
-        if self._root is not None:
-            self._root.geometry(f"{self.width}x{self.height}")
+        if self._window_widget is not None:
+            self._window_widget.resize(self.width, self.height)
         return self
 
     def GetSize(self) -> Tuple[int, int]:
-        if self._root is not None:
-            return (self._root.winfo_width(), self._root.winfo_height())
+        if self._window_widget is not None:
+            s = self._window_widget.size()
+            return (s.width(), s.height())
         return (self.width, self.height)
 
     def SetMinimumSize(self, width: int, height: int):
         self.min_width = int(width)
         self.min_height = int(height)
-        if self._root is not None:
-            self._root.minsize(self.min_width, self.min_height)
+        if self._window_widget is not None:
+            self._window_widget.setMinimumSize(self.min_width, self.min_height)
         return self
 
     SetMinSize = SetMinimumSize
@@ -2226,58 +2684,55 @@ class Window:
     def SetMaximumSize(self, width: int, height: int):
         self.max_width = int(width)
         self.max_height = int(height)
-        if self._root is not None:
-            self._root.maxsize(self.max_width, self.max_height)
+        if self._window_widget is not None:
+            self._window_widget.setMaximumSize(self.max_width, self.max_height)
         return self
 
     SetMaxSize = SetMaximumSize
 
     def Center(self):
-        if self._root is not None:
-            self._root.update_idletasks()
-            sw = self._root.winfo_screenwidth()
-            sh = self._root.winfo_screenheight()
-            x = (sw - self.width) // 2
-            y = (sh - self.height) // 2
-            self._root.geometry(f"{self.width}x{self.height}+{x}+{y}")
+        if self._window_widget is not None:
+            screen = self._window_widget.screen() or QApplication.primaryScreen()
+            if screen:
+                geom = screen.availableGeometry()
+                x = (geom.width() - self.width) // 2 + geom.left()
+                y = (geom.height() - self.height) // 2 + geom.top()
+                self._window_widget.move(max(0, x), max(0, y))
         return self
 
     def Minimize(self):
-        if self._root is not None:
-            self._root.iconify()
+        if self._window_widget is not None:
+            self._window_widget.showMinimized()
         return self
 
     def Maximize(self):
-        if self._root is not None:
-            self._root.state("zoomed")
+        if self._window_widget is not None:
+            self._window_widget.showMaximized()
         return self
 
     def Restore(self):
-        if self._root is not None:
-            self._root.state("normal")
+        if self._window_widget is not None:
+            self._window_widget.showNormal()
         return self
 
     def SetResizable(self, resizable: bool):
         self.resizable_x = bool(resizable)
         self.resizable_y = bool(resizable)
-        if self._root is not None:
-            self._root.resizable(self.resizable_x, self.resizable_y)
+        if self._window_widget is not None:
+            if not self.resizable_x and not self.resizable_y:
+                self._window_widget.setFixedSize(self.width, self.height)
+            else:
+                self._window_widget.setMinimumSize(0, 0)
+                self._window_widget.setMaximumSize(16777215, 16777215)
         return self
 
     def Resizable(self, width: bool, height: bool):
-        self.resizable_x = bool(width)
-        self.resizable_y = bool(height)
-        if self._root is not None:
-            self._root.resizable(self.resizable_x, self.resizable_y)
-        return self
+        return self.SetResizable(width and height)
 
     def SetIcon(self, path: str):
         self.icon_path = str(path)
-        if self._root is not None and os.path.isfile(self.icon_path):
-            try:
-                self._root.iconbitmap(self.icon_path)
-            except Exception:
-                pass
+        if self._window_widget is not None and os.path.isfile(self.icon_path):
+            self._window_widget.setWindowIcon(QIcon(self.icon_path))
         return self
 
     # Events
@@ -2304,7 +2759,7 @@ class Window:
     def Style(self, style: Any):
         self._ensure_alive()
         self._style.update(_normalize_dict(style))
-        if self._root is not None:
+        if self._window_widget is not None:
             self._apply_style()
         return self
 
@@ -2312,12 +2767,23 @@ class Window:
     UseStyle = Style
 
     def _apply_style(self):
-        if self._root is None:
+        if self._window_widget is None:
             return
         palette = _GLOBAL_THEME.get_palette()
         bg = self._style.get("background", self._style.get("bg", palette["background"]))
-        _safe_config(self._root, "background", bg)
-        _set_window_dark_titlebar(int(self._root.frame(), 16) if hasattr(self._root, "frame") else 0, palette["mode"] == "dark")
+        self._window_widget.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {bg};
+            }}
+            QWidget#central {{
+                background-color: {bg};
+            }}
+        """)
+        try:
+            hwnd = int(self._window_widget.winId())
+            _set_window_dark_titlebar(hwnd, palette["mode"] == "dark")
+        except Exception:
+            pass
 
     def Add(self, *components: Any):
         self._ensure_alive()
@@ -2326,20 +2792,21 @@ class Window:
                 self.Add(*comp)
                 continue
             if isinstance(comp, MenuBar):
-                comp.root = self._root
+                comp.root = self._window_widget
                 continue
             if not isinstance(comp, GUIComponent):
                 raise BlazeTypeError(f"Window.Add expects GUI components, got {type(comp).__name__}")
             comp._window = self
             self.children.append(comp)
-            if self._root is not None:
+            if self._window_widget is not None and self._central_layout is not None:
                 self._attach(comp)
         return self
 
     def _attach(self, component: GUIComponent):
         component._window = self
-        widget = component._realize(self._root)
-        widget.pack(fill="x", padx=4, pady=2)
+        w = component._realize(self._central_widget)
+        if self._central_layout is not None:
+            self._central_layout.addWidget(w)
 
     def _bind_interpreter(self, components: List[GUIComponent], interpreter):
         for component in components:
@@ -2354,56 +2821,92 @@ class Window:
                 for _, content_comp, _ in component.nav_items:
                     self._bind_interpreter([content_comp], interpreter)
 
-    def Run(self, interpreter=None):
-        self._ensure_alive()
-        if self._running:
-            raise BlazeRuntimeError("GUI window is already running", hint="Call app.Run() only once.")
+    def _setup_window_widget(self, interpreter=None):
+        _get_or_create_qapp()
 
-        _set_windows_dpi_awareness()
-        _set_windows_app_identity()
+        self._window_widget = QMainWindow()
+        self._window_widget.setWindowTitle(self.title)
 
-        self._root = tk.Tk()
-        self._root.title(self.title)
-        self._root.geometry(f"{self.width}x{self.height}")
-        self._root.resizable(self.resizable_x, self.resizable_y)
+        # Apply sizing accurately
+        self._window_widget.resize(self.width, self.height)
 
-        if self.min_width and self.min_height:
-            self._root.minsize(self.min_width, self.min_height)
-        if self.max_width and self.max_height:
-            self._root.maxsize(self.max_width, self.max_height)
+        if not self.resizable_x and not self.resizable_y:
+            self._window_widget.setFixedSize(self.width, self.height)
+        else:
+            if self.min_width and self.min_height:
+                self._window_widget.setMinimumSize(int(self.min_width), int(self.min_height))
+            if self.max_width and self.max_height:
+                self._window_widget.setMaximumSize(int(self.max_width), int(self.max_height))
+
+        # Central widget and layout
+        self._central_widget = QWidget(self._window_widget)
+        self._central_widget.setObjectName("central")
+        self._central_layout = QVBoxLayout(self._central_widget)
+        self._central_layout.setContentsMargins(10, 10, 10, 10)
+        self._central_layout.setSpacing(6)
+        self._central_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._window_widget.setCentralWidget(self._central_widget)
 
         if self.centered:
             self.Center()
 
         icon = self.icon_path or _get_gui_icon_path()
         if icon and os.path.isfile(icon):
-            try:
-                self._root.iconbitmap(default=icon)
-                self._root.iconbitmap(icon)
-            except Exception:
-                try:
-                    from PIL import Image as PILImage, ImageTk
-                    icon_img = ImageTk.PhotoImage(PILImage.open(icon))
-                    self._root.iconphoto(True, icon_img)
-                except Exception:
-                    pass
+            self._window_widget.setWindowIcon(QIcon(icon))
 
-        palette = _GLOBAL_THEME.get_palette()
-        _set_window_dark_titlebar(self._root.winfo_id(), palette["mode"] == "dark")
         self._apply_style()
 
-        self._root.protocol("WM_DELETE_WINDOW", self.Close)
+        # Connect window events
+        class _WindowFilter(QObject):
+            def __init__(self, win_obj: "Window"):
+                super().__init__()
+                self._win_obj = win_obj
+
+            def eventFilter(self, watched, event):
+                if event.type() == QEvent.Type.Close:
+                    self._win_obj.Close()
+                elif event.type() == QEvent.Type.Resize:
+                    s = event.size()
+                    self._win_obj._dispatch_window_event("resize", s.width(), s.height())
+                elif event.type() == QEvent.Type.Move:
+                    p = event.pos()
+                    self._win_obj._dispatch_window_event("move", p.x(), p.y())
+                elif event.type() == QEvent.Type.WindowStateChange:
+                    if self._win_obj._window_widget.isMinimized():
+                        self._win_obj._dispatch_window_event("minimize")
+                    elif self._win_obj._window_widget.isMaximized():
+                        self._win_obj._dispatch_window_event("maximize")
+                return False
+
+        self._window_filter = _WindowFilter(self)
+        self._window_widget.installEventFilter(self._window_filter)
+
         self._bind_interpreter(self.children, interpreter)
 
         for component in self.children:
             self._attach(component)
 
-        if "resize" in self._callbacks:
-            self._root.bind("<Configure>", lambda e: self._dispatch_window_event("resize", e.width, e.height))
+    def Run(self, interpreter=None):
+        self._ensure_alive()
+        if self._running:
+            raise BlazeRuntimeError("GUI window is already running", hint="Call app.Run() only once.")
 
+        qapp = _get_or_create_qapp()
+
+        if self._window_widget is None:
+            self._setup_window_widget(interpreter)
+
+        self._window_widget.show()
         self._running = True
+
         try:
-            self._root.mainloop()
+            # If Qt event loop is not already running, run it
+            if not getattr(qapp, "_blaze_loop_running", False):
+                qapp._blaze_loop_running = True
+                try:
+                    qapp.exec()
+                finally:
+                    qapp._blaze_loop_running = False
         except Exception as error:
             raise BlazeRuntimeError(f"GUI event loop error: {error}")
         finally:
@@ -2424,11 +2927,14 @@ class Window:
             self._dispatch_window_event("close")
         self._running = False
         self._destroyed = True
-        if self._root is not None:
+        if self in Window._ACTIVE_WINDOWS:
+            Window._ACTIVE_WINDOWS.remove(self)
+        if self._window_widget is not None:
             try:
-                self._root.destroy()
+                self._window_widget.close()
+                self._window_widget.deleteLater()
             finally:
-                self._root = None
+                self._window_widget = None
 
 
 # ============================================================
