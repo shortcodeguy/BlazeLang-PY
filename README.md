@@ -32,11 +32,10 @@ BlazeLang-PY/
 ├── main.py              # CLI Entrypoint & Execution Loop
 ├── benchmarks.py        # Performance profiling & loop iteration benchmark suite
 ├── blazelang/           # Core Lexer, Parser, AST Nodes, and Interpreter Engine
-├── extension/           # VS Code Syntax Highlighting Extension
 ├── tests/               # Automated test suites
-├── verify_parity.blz    # Feature verification script (.blz)
-├── test_map.blz         # Map data structure test (.blz)
-└── test_ref.blz         # Variable reference test (.blz)
+├── requirements.txt     # Python dependency specifications
+├── LICENSE              # MIT Open Source License
+└── README.md            # Technical Documentation
 ```
 
 ---
@@ -46,14 +45,7 @@ BlazeLang-PY/
 ### 1. Requirements
 - Python 3.10 or higher
 
-### 2. Running a BlazeLang Script
-To execute a `.blz` script using the Python reference interpreter:
-
-```bash
-python main.py verify_parity.blz
-```
-
-### 3. Running Benchmarks
+### 2. Running Benchmarks
 To run the performance profiling suite:
 
 ```bash
