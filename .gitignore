@@ -1,29 +1,20 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-.blaze/
-.venv/
-venv/
+*.py[cod]
+*$py.class
 
-# Node
-node_modules/
-**/node_modules/
-
-# Environment
-.env
-.env.*
-
-# VS Code
-.vscode/
-
-# Build / generated files
-dist/
+# PyInstaller / Build outputs
 build/
-*.log
+dist/
+*.spec
+output/
 
-# Python packaging
-*.egg-info/
+# Virtual environment
+venv/
+env/
+.venv/
 
-# OS
-Thumbs.db
-.DS_Store
+# VS Code / IDE
+.vscode/
+.idea/
+*.swp
